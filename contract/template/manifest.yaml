@@ -1,0 +1,18 @@
+name: <name>
+version: 0.1.0
+need: >
+  <one sentence: the recurring need this serves>
+triggers:
+  - <phrase, event, or schedule>
+context:
+  loads: <what and when>
+  never: <what it must not load>
+contract:
+  pre: []
+  post: []
+  invariants: []
+verifier: >
+  <what grades the output — never the producer>
+reports: sbar
+evolution:
+  signals: []
