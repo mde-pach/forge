@@ -7,9 +7,9 @@ description: Autonomously hunt for potential projects — missing bricks, incomp
 
 Prospect feeds judgment; judgment feeds validate. This capability never decides — it finds and grades.
 
-## 1. Define the grounds
+## 1. Define the grounds — need-first
 
-Name the sweep's hunting grounds before searching: which ecosystems (e.g. Python/Django, TS/Next, git-based tooling), which sources, what time window. Record the protocol (sources + queries) alongside the results.
+Grounds are **need-domains**: territories where a kind of unmet need surfaces (e.g. "knowledge/docs workflows", "API glue and DX", "content publishing") plus the sources to sweep and a time window. Grounds are never stacks — the stack is a consequence of the need, decided at build time (a git-based wiki could be built in anything). Record the protocol (domains + sources + queries) alongside the results.
 
 ## 2. Hunt — four modes, run any or all
 
@@ -20,7 +20,7 @@ Name the sweep's hunting grounds before searching: which ecosystems (e.g. Python
 
 ## 3. Record — one opportunity record per candidate
 
-Each record contains: the gap in one sentence; the evidence, each item graded (source reliability × item credibility, linked to the real artifact); the why-now (or explicit "none found" — that is a downgrade, not a footnote); the graveyard/tarpit check (prior attempts, living and dead, and why they landed where they did); the shape (well-shape: who has this pain intensely, roughly how many are reachable); the fit note (does it match the owner's demonstrated tastes and leverage — glue layers, DX, git-native tools); and the implementation angle if one is visible — the clever twist that makes it possible.
+Each record contains: the gap in one sentence; the evidence, each item graded (source reliability × item credibility, linked to the real artifact); the why-now (or explicit "none found" — that is a downgrade, not a footnote); the graveyard/tarpit check (prior attempts, living and dead, and why they landed where they did); the shape (well-shape: who has this pain intensely, roughly how many are reachable); the fit note (does it match the owner's demonstrated tastes and leverage — glue layers, DX, git-native tools); the implementation angle if one is visible — the clever twist that makes it possible; and, as an output only, the implementation surface the need implies (a Python lib if the need is Python-shaped, TS if TS-shaped, anything if agnostic).
 
 ## 4. Deliver — judgment brief
 
@@ -28,7 +28,7 @@ One SBAR brief per sweep: grounds covered, protocol used, candidates ranked (evi
 
 ## Autonomy
 
-Sweeps are read-only research — they run without gates, attended or scheduled. The gate is judgment, and it is always the owner's. Nothing advances to validate, and nothing gets built, from a sweep alone.
+Prospect is invoked, never self-scheduled. While running, a sweep is read-only research and needs no gate. The gate is judgment, and it is always the owner's. Nothing advances to validate, and nothing gets built, from a sweep alone.
 
 ## Verification
 
