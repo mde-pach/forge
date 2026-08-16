@@ -16,13 +16,16 @@ contract:
     - a written value hypothesis exists ("we help X do Y by doing Z") with the
       riskiest assumptions ranked and a kill/continue threshold set per test
   post:
-    - every evidence item is graded (source reliability × item credibility) and
+    - >-
+      every evidence item is graded (source reliability × item credibility) and
       traceable to a real signal — a person, a payment, a measured behavior
-    - each test ends in an explicit decision - persevere, pivot, or kill -
+    - >-
+      each test ends in an explicit decision (persevere, pivot, or kill)
       against its pre-registered threshold
   invariants:
     - synthetic/LLM-roleplay output is never reported as validation evidence
-    - "would you use this?" answers, compliments, and friends' enthusiasm never count as demand
+    - >-
+      "would you use this?" answers, compliments, and friends' enthusiasm never count as demand
     - no test without a decision rule; no unbounded testing loops
 verifier: >
   The evidence audit - every claim in the recommendation traces to a graded

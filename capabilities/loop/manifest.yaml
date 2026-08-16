@@ -4,11 +4,11 @@ need: >
   Work keeps producing learnings (corrections, caught-late errors, repeated
   instructions, unserved needs) that die with the session instead of improving forge.
 triggers:
-  - "reflect" / end of any substantial piece of work
+  - reflect — end of any substantial piece of work
   - an error reaches runtime that a boundary should have caught
   - the same instruction is given manually for the second time
   - a need occurs repeatedly with no capability serving it
-  - "factorize" (periodic, on demand)
+  - factorize (periodic, on demand)
 context:
   loads: the session's own trajectory; the forge files a diff would target
   never: unrelated capabilities' bodies; past sessions wholesale
