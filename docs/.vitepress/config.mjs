@@ -1,4 +1,17 @@
 import { defineConfig } from 'vitepress'
+import { readdirSync, existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const gen = join(dirname(fileURLToPath(import.meta.url)), '../generated')
+const capabilityItems = existsSync(gen)
+  ? readdirSync(gen)
+      .filter((f) => f.startsWith('capability-') && f.endsWith('.md'))
+      .map((f) => {
+        const n = f.slice('capability-'.length, -'.md'.length)
+        return { text: n, link: `/generated/capability-${n}` }
+      })
+  : []
 
 export default defineConfig({
   base: '/forge/',
@@ -23,10 +36,7 @@ export default defineConfig({
       },
       {
         text: 'Capabilities',
-        items: [
-          { text: 'loop', link: '/generated/capability-loop' },
-          { text: 'validate', link: '/generated/capability-validate' },
-        ],
+        items: capabilityItems,
       },
       {
         text: 'How-to',
