@@ -23,7 +23,7 @@ bash bootstrap/install.sh user                        # wire forge into ~/.claud
 bash bootstrap/build.sh                               # regenerate dist/ projections
 ```
 
-Or, in any Claude surface with the forge-setup skill available: ask for forge setup. Canonical remote: https://github.com/mde-pach/forge (GitHub access for sessions: `docs/how-to/connect-github.md`).
+Or, in any Claude surface with the forge-setup skill available: ask for forge setup. Canonical remote: https://github.com/mde-pach/forge — docs: https://mde-pach.github.io/forge/ (GitHub access for sessions: `docs/how-to/connect-github.md`).
 
 ## Evolving forge
 
