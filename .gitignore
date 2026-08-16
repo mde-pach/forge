@@ -1,2 +1,7 @@
 dist/
 *.skill
+node_modules/
+docs/generated/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+.vercel/
