@@ -16,10 +16,12 @@ npm run docs:dev      # live-reload at localhost:5173
 npm run docs:build    # static site → docs/.vitepress/dist
 ```
 
-## Deploy
+## Deploy — GitHub Pages
 
-The Vercel project is linked to the GitHub repo: every push to `main` rebuilds and redeploys the site automatically (`vercel.json` pins build command and output directory — explicit over detection). A session with the Vercel connector can also deploy directly when needed.
+`.github/workflows/docs.yml` builds the site on every push to `main` and deploys it via GitHub Pages (actions/deploy-pages). One-time setup per repo: Settings → Pages → Source: **GitHub Actions**. The site URL is `https://<owner>.github.io/<repo>/` (the VitePress `base` option must match `/<repo>/`).
+
+Note: on the GitHub Free plan, Pages only works on public repositories; a private repo needs GitHub Pro. Fallback if Actions is unavailable: build locally and push `docs/.vitepress/dist` to a `gh-pages` branch, source it in Pages settings.
 
 ## Applying the standard to a new project
 
-Copy `package.json` docs scripts, `docs/.vitepress/` (config + assemble map adapted to that project's canonical files), and `vercel.json`; link the repo to a Vercel project once. Everything else follows.
+Copy `package.json` docs scripts, `docs/.vitepress/` (config with `base` set to the repo name + assemble map adapted to that project's canonical files), and `.github/workflows/docs.yml`; enable Pages (Source: GitHub Actions) once. Everything else follows.

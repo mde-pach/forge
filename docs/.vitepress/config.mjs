@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/forge/',
   title: 'forge',
   description: "maxime's personal operating framework for working with Claude",
   ignoreDeadLinks: true,
