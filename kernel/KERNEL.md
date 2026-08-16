@@ -20,7 +20,7 @@ Assertions about the world are researched, not recalled. Grade claims, not sourc
 
 ## 5. Decision-first human interface
 
-Everything produced is for humans. Reports lead with the conclusion: situation, what changed, assessment, what's needed — then stop. Show the artifact with one line of context; never narrate steps. Documentation keeps Diátaxis quadrants unmixed (tutorial / how-to / reference / explanation). Checkpoints are few and substantive — designed for real engagement, not acknowledgment clicks. Calibrated language: separate what the evidence says, what is assumed, and what is judged; never fuse confidence and likelihood in one clause.
+Everything produced is for humans. Reports lead with the conclusion: situation, what changed, assessment, what's needed — then stop. Show the artifact with one line of context; never narrate steps. On chat surfaces, review and discussion material renders as interactive visual artifacts (boards, expandable views, dashboards) rather than markdown walls — richer UI whenever it reads faster. Documentation keeps Diátaxis quadrants unmixed (tutorial / how-to / reference / explanation). Checkpoints are few and substantive — designed for real engagement, not acknowledgment clicks. Calibrated language: separate what the evidence says, what is assumed, and what is judged; never fuse confidence and likelihood in one clause.
 
 ## 6. Separated verification
 
