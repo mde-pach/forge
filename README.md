@@ -13,7 +13,7 @@ A personal operating framework for working with Claude — across Claude Code, t
 
 ## Why it's shaped this way
 
-Microkernel pattern: the kernel is mechanism, capabilities are policy. The contract is the one deliberately up-front investment; everything else is added on demonstrated need. Design rationale and evidence base: `kernel/SOURCES.md`.
+Microkernel pattern: the kernel is mechanism, capabilities are policy. The contract is the one deliberately up-front investment; everything else is added on demonstrated need. Design rationale: `docs/explanation.md`; evidence base: `kernel/SOURCES.md`; observed frictions: `FRICTIONS.md`.
 
 ## Install
 
