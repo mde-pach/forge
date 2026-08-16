@@ -46,6 +46,7 @@ Each pre/postcondition is checked by exactly one side — no defensive double-ch
 - **Reporting**: decision-first (situation, change, assessment, ask). Reports and durable state go to files/git — never only to the conversation.
 - **Isolation**: capabilities do not read each other's internals; they compose through artifacts and the kernel's conventions.
 - **Scope**: one need per capability. A new job means a new capability, not a feature added to an old one.
+- **Output separation**: capability output (records, reports, generated data) never enters a framework repo — framework repos carry mechanism only. Outputs live in the session workspace and in owner-designated private data stores.
 
 ## Lifecycle
 

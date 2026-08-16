@@ -36,6 +36,6 @@ Evidence audit: every signal in every record resolves to a linked real artifact.
 
 ## Report
 
-SBAR per sweep. Durable state: one file per candidate under `opportunities/` in the forge repo (records survive sessions; judged-out records are marked, not deleted — rejections are calibration data).
+SBAR per sweep. Durable state: one file per candidate in the owner-designated private data store — NEVER in a framework repo (output separation, contract convention). Until a store is designated: session workspace + files delivered to the owner. Judged-out records are marked, not deleted — rejections are calibration data.
 
 Method rationale and evidence: `references/methods.md`.
