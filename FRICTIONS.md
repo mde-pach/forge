@@ -6,4 +6,5 @@ Observed friction points, appended as they occur. Each either becomes a boundary
 |---|------|----------|--------|
 | 1 | 2026-08-16 | Cloud sessions are ephemeral → git credentials don't persist across sessions. | closed — GitHub's official remote MCP server as an account-level custom connector (docs/how-to/connect-github.md); registry lacked it, but custom connectors accept any remote MCP URL |
 | 2 | 2026-08-16 | Capability manifests were hand-written and shipped with invalid YAML twice. | closed — validation boundary added to bootstrap/build.sh (commit 6c531a2) |
-| 3 | 2026-08-16 | forge exists only in one session's container until pushed; a reclaimed container = lost history since last delivery. | open — mitigated by zip deliveries; solved by GitHub push |
+| 3 | 2026-08-16 | forge exists only in one session's container until pushed; a reclaimed container = lost history since last delivery. | closed — canonical remote: https://github.com/mde-pach/forge (mirrored 2026-08-16) |
+| 4 | 2026-08-16 | Custom connectors can't be created from the mobile app (browse-only), and GitHub lacks DCR so OAuth needs a user-created OAuth App — two undocumented detours during setup. | closed — verified procedure written into docs/how-to/connect-github.md |

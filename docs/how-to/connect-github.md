@@ -2,15 +2,20 @@
 
 ## Primary: GitHub's official remote MCP server as a custom connector (one-time, all surfaces)
 
-Durable, account-level, no tokens in chat. Works on Claude web/mobile, Cowork, and Desktop; sessions get repo tools automatically.
+Durable, account-level, no tokens in chat. Once connected, every Claude surface (web, mobile, Cowork, Desktop) gets repo tools automatically. Verified working 2026-08-16.
 
-1. Claude app → Settings → Connectors → **Add custom connector**
-2. Name: `GitHub` — URL: `https://api.githubcopilot.com/mcp/x/repos`
-   (the `/x/repos` path exposes only the repository toolset — create repo, read/write contents, branches — least privilege by URL; append `/readonly` for read-only surfaces)
-3. Connect → OAuth sign-in to GitHub → authorize.
+1. **Create a GitHub OAuth App** (GitHub → Settings → Developer settings → OAuth Apps → New OAuth App). GitHub does not support automatic client registration, so Claude needs your own app:
+   - Homepage URL: `https://claude.ai`
+   - Authorization callback URL: `https://claude.ai/api/mcp/auth_callback` (exact — used by all Claude surfaces)
+   - Register, copy the Client ID, generate and copy a Client Secret.
+2. **Add the custom connector — from claude.ai in a browser, not the mobile app** (the mobile app can only browse the directory): claude.ai → Settings → Connectors → Add custom connector.
+   - Name: `GitHub` — URL: `https://api.githubcopilot.com/mcp/x/repos`
+     (`/x/repos` exposes only the repository toolset — create repo, read/write contents, branches — least privilege by URL; append `/readonly` for read-only surfaces)
+   - Put the OAuth App's Client ID and Client Secret in the OAuth fields.
+3. Connect → GitHub authorization page → authorize.
 4. In a session, enable the connector in the chat's connector settings if it isn't already.
 
-Notes: writes go through GitHub's API (`push_files` = one commit per call), so sessions mirror their local git commits one by one — history stays meaningful. If OAuth is refused (some accounts route this through Copilot access), fall back to the PAT method below.
+Notes: writes go through GitHub's API (`push_files` = one commit per call), so sessions mirror their local git commits one by one — history stays meaningful. Renames need `push_files` + `delete_file` (two commits).
 
 ## Fallback: per-session fine-grained PAT (raw git push)
 

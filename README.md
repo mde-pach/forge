@@ -23,7 +23,7 @@ Microkernel pattern: the kernel is mechanism, capabilities are policy. The contr
 ./bootstrap/build.sh                              # regenerate dist/ projections
 ```
 
-Or, in any Claude surface with the forge-setup skill available: ask for forge setup.
+Or, in any Claude surface with the forge-setup skill available: ask for forge setup. Canonical remote: https://github.com/mde-pach/forge (GitHub access for sessions: `docs/how-to/connect-github.md`).
 
 ## Evolving forge
 
