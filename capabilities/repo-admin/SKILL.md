@@ -8,9 +8,9 @@ description: Perform GitHub repo infrastructure operations (Pages, settings, CI,
 ## Decision ladder — use the highest rung available
 
 1. **MCP tool** (GitHub connector, `/mcp/x/all` exposes every toolset — repos, actions, issues…): if a tool covers the operation, use it directly.
-2. **Self-serve workflow with GITHUB_TOKEN**: operations GitHub's API allows the workflow's own token to do, the repo does to itself. Example: `actions/configure-pages@v5` with `enablement: true` creates the Pages site on first run — no human click. Encode such operations in workflows triggered by push or `workflow_dispatch` (dispatch and run-watching are in the actions toolset).
-3. **Secret-backed workflow**: operations needing elevated rights (e.g. repo visibility) run in an `admin.yml` `workflow_dispatch` workflow using a fine-grained PAT stored once by the human as a repo secret (`ADMIN_TOKEN`, Administration: write, scoped to the one repo). The secret is set once in the UI and never transits chat.
-4. **Escalate**: if no rung reaches the operation, tell the human the exact step, why it's unreachable, and log a friction entry. An escalation that repeats is a mechanism gap to close.
+2. **Self-serve workflow with GITHUB_TOKEN**: operations GitHub's API allows the workflow's own token to do, the repo does to itself. Verified limit: Pages site *creation* is admin-gated by GitHub (post-CVE policy; "Resource not accessible by integration") — GITHUB_TOKEN can deploy to an existing Pages site but never create one. Run-watching on public repos needs no extra toolset: `api.github.com/repos/<o>/<r>/actions/runs` is world-readable.
+3. **Secret-backed reconciler**: admin operations run in an `admin.yml` workflow using a fine-grained PAT stored by the human as a repo secret (`ADMIN_TOKEN`: Administration + Pages write). Trigger it by **push** to a desired-state file (e.g. `.admin/ops.yml`) rather than `workflow_dispatch` — sessions then drive admin with plain contents-write, no extra connector toolset. Build this rung when the second admin need appears; an org-level secret (if repos move to a GitHub org) makes it zero-setup for every future repo.
+4. **Escalate**: if no rung reaches the operation, tell the human the exact step, why it's unreachable, and log a friction entry. Known irreducible escalation: first-time Pages enablement on a repo without rung 3 — one click (Settings → Pages → Source: GitHub Actions).
 
 ## Rules
 
