@@ -18,9 +18,9 @@ Microkernel pattern: the kernel is mechanism, capabilities are policy. The contr
 ## Install
 
 ```
-./bootstrap/install.sh project /path/to/project   # wire forge into a project
-./bootstrap/install.sh user                       # wire forge into ~/.claude
-./bootstrap/build.sh                              # regenerate dist/ projections
+bash bootstrap/install.sh project /path/to/project   # wire forge into a project
+bash bootstrap/install.sh user                        # wire forge into ~/.claude
+bash bootstrap/build.sh                               # regenerate dist/ projections
 ```
 
 Or, in any Claude surface with the forge-setup skill available: ask for forge setup. Canonical remote: https://github.com/mde-pach/forge (GitHub access for sessions: `docs/how-to/connect-github.md`).
