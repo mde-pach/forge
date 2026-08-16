@@ -9,8 +9,8 @@ Durable, account-level, no tokens in chat. Once connected, every Claude surface 
    - Authorization callback URL: `https://claude.ai/api/mcp/auth_callback` (exact — used by all Claude surfaces)
    - Register, copy the Client ID, generate and copy a Client Secret.
 2. **Add the custom connector — from claude.ai in a browser, not the mobile app** (the mobile app can only browse the directory): claude.ai → Settings → Connectors → Add custom connector.
-   - Name: `GitHub` — URL: `https://api.githubcopilot.com/mcp/x/repos`
-     (`/x/repos` exposes only the repository toolset — create repo, read/write contents, branches — least privilege by URL; append `/readonly` for read-only surfaces)
+   - Name: `GitHub` — URL: `https://api.githubcopilot.com/mcp/x/all`
+     (all toolsets — repos, actions, issues, PRs — needed by the repo-admin capability for workflow dispatch and run-watching; use `/x/repos` for a minimal contents-only grant, or append `/readonly` for read-only surfaces)
    - Put the OAuth App's Client ID and Client Secret in the OAuth fields.
 3. Connect → GitHub authorization page → authorize.
 4. In a session, enable the connector in the chat's connector settings if it isn't already.

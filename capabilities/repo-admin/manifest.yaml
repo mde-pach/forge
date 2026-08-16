@@ -1,0 +1,35 @@
+name: repo-admin
+version: 0.1.0
+need: >
+  Repo infrastructure operations (Pages, settings, secrets, workflow runs) keep
+  requiring the human to click through GitHub UI because sessions lack a mechanism.
+triggers:
+  - an infrastructure operation on a repo is required by an approved plan
+  - setting up docs/deployment/CI for a repo
+  - a session is about to ask the human to perform a GitHub UI step
+context:
+  loads: the target repo's workflow files and settings state, on demand
+  never: credentials of any kind into files, reports, or projections
+contract:
+  pre:
+    - the operation is within the currently approved plan
+  post:
+    - >-
+      the operation was executed through the highest-autonomy mechanism available
+      (MCP tool, then self-serve workflow, then secret-backed workflow)
+    - the effect was verified by probing, never assumed from a green run
+    - >-
+      if escalated to the human, the report contains the exact step and why no
+      mechanism could do it — and a friction entry is logged
+  invariants:
+    - secrets never appear in chat, commits, or projections
+    - >-
+      visibility changes, deletions, and other irreversible ops require explicit
+      plan approval naming the operation
+verifier: >
+  The post-op probe - an API read or URL fetch demonstrating the effect exists.
+reports: sbar
+evolution:
+  signals:
+    - repeated escalations for the same operation class (mechanism gap to close)
+    - a new MCP toolset or Actions capability covering an op currently escalated
