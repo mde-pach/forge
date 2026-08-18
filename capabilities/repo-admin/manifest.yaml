@@ -14,17 +14,14 @@ contract:
   pre:
     - the operation is within the currently approved plan
   post:
-    - >-
-      the operation was executed through the highest-autonomy mechanism available
+    - the operation was executed through the highest-autonomy mechanism available
       (MCP tool, then self-serve workflow, then secret-backed workflow)
     - the effect was verified by probing, never assumed from a green run
-    - >-
-      if escalated to the human, the report contains the exact step and why no
+    - if escalated to the human, the report contains the exact step and why no
       mechanism could do it — and a friction entry is logged
   invariants:
     - secrets never appear in chat, commits, or projections
-    - >-
-      visibility changes, deletions, and other irreversible ops require explicit
+    - visibility changes, deletions, and other irreversible ops require explicit
       plan approval naming the operation
 verifier: >
   The post-op probe - an API read or URL fetch demonstrating the effect exists.
