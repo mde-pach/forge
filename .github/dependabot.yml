@@ -1,0 +1,29 @@
+version: 2
+# forge itself carries GitHub Actions refs and one npm lockfile (VitePress).
+# The stack templates carry their own dependabot.yml when scaffolded.
+updates:
+  # The highest-value one: SHA-pinned actions are frozen until something
+  # deliberately moves them, and this is the thing that moves them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(actions)"
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # A malicious release is usually yanked within days. Waiting is the cheapest
+    # supply-chain control there is.
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
+    groups:
+      docs:
+        patterns: ["*"]
+    open-pull-requests-limit: 5

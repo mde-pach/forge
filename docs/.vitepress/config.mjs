@@ -17,7 +17,8 @@ export default defineConfig({
   base: '/forge/',
   title: 'forge',
   description: "maxime's personal operating framework for working with Claude",
-  ignoreDeadLinks: true,
+  // A dead link is a documentation bug; the build should say so.
+  ignoreDeadLinks: false,
   themeConfig: {
     nav: [
       { text: 'Kernel', link: '/generated/kernel' },
@@ -32,6 +33,7 @@ export default defineConfig({
           { text: 'Kernel — the operating mode', link: '/generated/kernel' },
           { text: 'Capability contract v1.0.0', link: '/generated/contract' },
           { text: 'Evidence base (sources)', link: '/generated/sources' },
+          { text: 'A base CLAUDE.md', link: '/generated/claude-md' },
         ],
       },
       {
@@ -41,6 +43,7 @@ export default defineConfig({
       {
         text: 'How-to',
         items: [
+          { text: 'Start a project', link: '/how-to/start-a-project' },
           { text: 'Connect GitHub', link: '/how-to/connect-github' },
           { text: 'Build & run these docs', link: '/how-to/docs' },
         ],

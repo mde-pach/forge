@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Actions are pinned to commit SHAs, which never move on their own.
+  # This is the mechanism that moves them, under review.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(actions)"
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # A compromised release is usually yanked within days. Waiting costs
+    # nothing and is the cheapest supply-chain control available.
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
+    groups:
+      npm-prod:
+        dependency-type: production
+        patterns: ["*"]
+      npm-dev:
+        dependency-type: development
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

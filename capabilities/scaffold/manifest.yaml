@@ -28,6 +28,11 @@ contract:
 verifier: >
   Run the generated project's own gate twice - once on the untouched scaffold
   (must pass) and once with a deliberately broken file (must exit 2).
+# Files outside this directory that the capability cannot run without.
+# The projection copies them in; without this, the projected skill is a
+# SKILL.md describing a script that is not there.
+assets:
+  - stacks
 reports: sbar
 evolution:
   signals:

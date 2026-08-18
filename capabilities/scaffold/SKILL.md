@@ -8,8 +8,12 @@ description: Start a new project with forge's process enforcement already wired 
 ## Run it
 
 ```bash
-bash capabilities/scaffold/scaffold.sh python /path/to/my-api  "What it does"
-bash capabilities/scaffold/scaffold.sh nextjs /path/to/my-web  "What it does"
+# installed as a skill (the usual case)
+bash .claude/skills/scaffold/scaffold.sh python /path/to/my-api "What it does"
+bash .claude/skills/scaffold/scaffold.sh nextjs /path/to/my-web "What it does"
+
+# from a forge checkout
+bash capabilities/scaffold/scaffold.sh python /path/to/my-api "What it does"
 ```
 
 The directory name becomes the project name; a Python module name is derived
@@ -18,47 +22,47 @@ the next commands are printed.
 
 ## What gets enforced, and where
 
-Two layers, because they catch different things:
+Three layers, because they catch different things:
 
 | Layer | Fires | Runs | On failure |
 |---|---|---|---|
-| `PostToolUse` | after each file edit | ruff / biome on **that file** (~50ms) | exit 2 - diagnostics go back to Claude, which self-corrects |
-| `Stop` | when Claude tries to finish the turn | the **whole project**: ruff + mypy --strict + pytest, or biome ci + tsc --noEmit + tests | exit 2 - the turn cannot end |
+| `PostToolUse` | after each file edit | ruff / biome on **that file** (~50ms) | exit 2 — diagnostics go back to Claude, which self-corrects |
+| `Stop` | when Claude tries to finish the turn | the **whole project**: ruff + mypy --strict + pytest, or biome ci + tsc --noEmit + next build | exit 2 — the turn cannot end |
+| CI | on push and PR | **the same `gate.sh`**, plus a docker build | the build is red |
 
 The Stop gate is the real one. It catches what per-file checks structurally
 cannot: cross-module type errors, broken tests, and files written through Bash
-rather than Edit. A loop guard releases the turn after three identical
-failures, with a loud warning, so a broken gate cannot trap a session.
+rather than Edit.
+
+CI deliberately executes the same script rather than a parallel list of steps.
+There is one definition of green, so local and CI cannot drift — only the
+escape hatch differs: the interactive loop guard releases a turn after three
+identical failures (then re-arms), while CI sets `FORGE_GATE_NO_RELEASE=1`,
+because in CI there is no human to unblock and a release would turn a red build
+green.
 
 ## Verify before handing over
 
-Never report a scaffold as done without running both halves of its own verifier:
+The script verifies itself and prints the result; a scaffold is only done when
+that line reads `verifier : PASS`. It runs three checks, and each exists because
+the absence of it shipped a broken gate at least once:
 
-```bash
-cd <target> && echo '{}' | ./.claude/hooks/gate.sh; echo "expect 0"
-printf 'x=1\n def f( ):pass\n' > src/<module>/_probe.py     # or a .tsx equivalent
-echo '{"tool_input":{"file_path":"src/<module>/_probe.py"}}' | ./.claude/hooks/fast-check.sh; echo "expect 2"
-rm src/<module>/_probe.py
+```
+clean gate run 1 -> 0    the scaffold is green
+clean gate run 2 -> 0    and STAYS green: `next build` rewrites tsconfig.json,
+                         which made run 2 red forever while run 1 looked fine
+broken-file probe -> 2   the fast check actually blocks
 ```
 
-A hook that is not executable exits 127 and is treated as a non-blocking error:
-the gate looks installed and enforces nothing. That is why the probe is not optional.
+If the line reads `FAIL` or `SKIPPED`, the project is not ready to hand over —
+report that, do not paper over it. `SKIPPED` means dependencies did not install
+(usually no network), so nothing was proven.
 
-## Requirements
+## What it refuses
 
-`jq` must be on PATH - the hooks read the tool payload with it. Python stack
-needs `uv`; Next.js stack needs Node and npm.
-
-## After scaffolding
-
-Fill in `CLAUDE.md` - it ships as a skeleton on purpose. Anything file-specific
-belongs in `.claude/rules/*.md` with `paths:` frontmatter, which loads only when
-a matching file is read.
-
-## Report
-
-SBAR: what was scaffolded, the two verifier results (green scaffold / blocked
-probe), and what the owner must fill in.
-
-Stack details and the evidence behind every version and config choice:
-`references/verified-stack-facts.md`.
+- a target directory that exists and is not empty
+- a Python module name owned by the standard library, or one that resolves to an
+  installed package instead of the project's own `src/` (`py`, for instance, is
+  shipped transitively by pytest and would silently shadow the project)
+- creating a repository, choosing a host, or publishing anything — that is a
+  separate, approved decision

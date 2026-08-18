@@ -10,4 +10,5 @@ npm run check          # biome: format + lint + import sort, writes fixes
 docker compose up --build
 ```
 
-Quality gates run automatically inside Claude Code sessions (see `.claude/`).
+Quality gates run automatically inside Claude Code sessions (see `.claude/`):
+biome on every edit; `biome ci` + `tsc --noEmit` + `next build` before a turn can end.

@@ -7,16 +7,21 @@ FORGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMMIT="$(git -C "$FORGE_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'uncommitted')"
 MODE="${1:?usage: install.sh project <path> | user}"
 
+# shellcheck source=bootstrap/_project.sh
+. "$FORGE_ROOT/bootstrap/_project.sh"
+
 link_skills() { # $1 = target .claude dir
-  mkdir -p "$1/skills"
+  local skills="$1/skills" name
+  # Stale skills from a previous install (a capability that has since been
+  # deleted) would keep firing. The projection owns this directory.
+  rm -rf "$skills"
+  mkdir -p "$skills"
   for cap in "$FORGE_ROOT"/capabilities/*/; do
     name="$(basename "$cap")"
-    mkdir -p "$1/skills/$name"
-    cp "$cap/SKILL.md" "$1/skills/$name/SKILL.md"
-    [ -d "$cap/references" ] && cp -r "$cap/references" "$1/skills/$name/"
+    project_capability "$cap" "$skills/$name"
   done
-  cp "$FORGE_ROOT/bootstrap/SKILL.md" "$1/skills/forge-setup/SKILL.md" 2>/dev/null || {
-    mkdir -p "$1/skills/forge-setup" && cp "$FORGE_ROOT/bootstrap/SKILL.md" "$1/skills/forge-setup/SKILL.md"; }
+  mkdir -p "$skills/forge-setup"
+  cp "$FORGE_ROOT/bootstrap/SKILL.md" "$skills/forge-setup/SKILL.md"
 }
 
 case "$MODE" in

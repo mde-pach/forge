@@ -12,6 +12,14 @@ description: Perform GitHub repo infrastructure operations (Pages, settings, CI,
 3. **Secret-backed reconciler**: admin operations run in an `admin.yml` workflow using a fine-grained PAT stored by the human as a repo secret (`ADMIN_TOKEN`: Administration + Pages write). Trigger it by **push** to a desired-state file (e.g. `.admin/ops.yml`) rather than `workflow_dispatch` — sessions then drive admin with plain contents-write, no extra connector toolset. Build this rung when the second admin need appears; an org-level secret (if repos move to a GitHub org) makes it zero-setup for every future repo.
 4. **Escalate**: if no rung reaches the operation, tell the human the exact step, why it's unreachable, and log a friction entry. Known irreducible escalation: first-time Pages enablement on a repo without rung 3 — one click (Settings → Pages → Source: GitHub Actions).
 
+## Creating a new repository
+
+The one procedure with enough failed improvisations to be worth writing down:
+`references/new-repo.md` — approval (name, visibility, licence) -> verified
+local scaffold -> `create_repository` with `autoInit: false` -> one `push_files`
+-> blob-SHA proof -> CI run as the real proof. It also records what the git
+API silently drops (file modes) and what still needs a human.
+
 ## Rules
 
 - Verify by probing the effect (fetch the URL, read the setting back) — a green workflow run is not proof.

@@ -1,0 +1,187 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Layer 1 - the repo's own shape. Cheap, runs on everything.
+  hygiene:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: shell syntax + shellcheck (every .sh in the repo)
+        run: |
+          set -euo pipefail
+          # find, not globstar: `**` does not descend into dot-directories, so a
+          # glob would silently skip stacks/*/template/.claude/hooks/*.sh - the
+          # most important scripts in the repo.
+          mapfile -d '' files < <(find bootstrap capabilities scripts stacks -name '*.sh' -type f -print0)
+          printf 'checking %d scripts\n' "${#files[@]}"
+          [ "${#files[@]}" -ge 11 ] || { echo "expected at least 11 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
+          for f in "${files[@]}"; do bash -n "$f"; done
+          # The hook fragments are sourced, never executed: tell shellcheck.
+          shellcheck --shell=bash --external-sources --severity=warning "${files[@]}"
+
+      - name: capability manifests
+        run: |
+          set -euo pipefail
+          pip install pyyaml
+          python3 scripts/validate-manifests.py
+
+      - name: hooks are executable in git's index
+        run: |
+          set -euo pipefail
+          bad=0
+          while IFS= read -r f; do
+            mode=$(git ls-files -s "$f" | cut -d' ' -f1)
+            [ "$mode" = 100755 ] || { echo "NOT EXECUTABLE in git: $f (mode $mode)"; bad=1; }
+          done < <(git ls-files 'stacks/*/template/.claude/hooks/*.sh' | grep -v '_guard.sh\|_common.sh')
+          exit "$bad"
+
+      - name: the projections build and carry their declared assets
+        run: |
+          set -euo pipefail
+          pip install pyyaml
+          # dist/ is a build output (gitignored), so "freshness" is not a thing
+          # to check - that it BUILDS, and that the skills are not hollow, is.
+          bash bootstrap/build.sh
+          test -x dist/plugin/skills/scaffold/scaffold.sh
+          test -d dist/plugin/skills/scaffold/stacks/python/template
+          test -d dist/plugin/skills/scaffold/stacks/nextjs/template
+          # And the same for a real install: the projected skill must run.
+          bash bootstrap/install.sh project "$RUNNER_TEMP/installed"
+          bash "$RUNNER_TEMP/installed/.claude/skills/scaffold/scaffold.sh" 2>&1 \
+            | grep -q 'usage: scaffold.sh' \
+            || { echo "the projected scaffold skill is not runnable"; exit 1; }
+
+      - name: the docs build, with dead links treated as failures
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run docs:build
+
+  # Layer 2 - the scaffolds actually work. This is the expensive, load-bearing one.
+  scaffold-python:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      - name: scaffold, and require the verifier to pass
+        run: |
+          set -euo pipefail
+          bash capabilities/scaffold/scaffold.sh python "$RUNNER_TEMP/py-app" 'CI probe | with & weird /chars/' | tee out.txt
+          grep -q 'verifier : PASS' out.txt || { echo "the scaffold verifier did not pass"; exit 1; }
+
+      - name: the gate blocks a type error a linter cannot see
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/py-app"
+          printf 'x: int = "no"\n' > src/py_app/ci_broken.py
+          rm -f .claude/.gate-state
+          rc=0; CLAUDE_PROJECT_DIR="$PWD" bash .claude/hooks/gate.sh </dev/null >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 2 ] || { echo "gate returned $rc, expected 2 (BLOCK)"; exit 1; }
+          rm -f src/py_app/ci_broken.py .claude/.gate-state
+
+      - name: the gate fails closed with no project marker and no jq
+        run: |
+          set -euo pipefail
+          cd /
+          rc=0; env -u CLAUDE_PROJECT_DIR bash "$RUNNER_TEMP/py-app/.claude/hooks/gate.sh" </dev/null >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 0 ] && { echo "gate passed silently with CLAUDE_PROJECT_DIR unset"; exit 1; }
+          d=$(mktemp -d)
+          for b in /usr/bin/* /bin/*; do n=$(basename "$b"); [ "$n" = jq ] && continue; ln -sf "$b" "$d/$n" 2>/dev/null || true; done
+          rc=0
+          printf '{"tool_input":{"file_path":"%s/src/py_app/__init__.py"}}' "$RUNNER_TEMP/py-app" \
+            | env -i PATH="$d" HOME="$HOME" CLAUDE_PROJECT_DIR="$RUNNER_TEMP/py-app" \
+              bash "$RUNNER_TEMP/py-app/.claude/hooks/fast-check.sh" >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 2 ] || { echo "fast-check returned $rc without jq, expected 2 (BLOCK)"; exit 1; }
+
+      - name: the container image builds
+        run: docker build -t forge-ci-py "$RUNNER_TEMP/py-app"
+
+      - name: a name the stdlib already owns is refused
+        run: |
+          set -euo pipefail
+          rc=0; bash capabilities/scaffold/scaffold.sh python "$RUNNER_TEMP/json" 2>/dev/null || rc=$?
+          [ "$rc" = 1 ] || { echo "scaffold accepted a stdlib module name"; exit 1; }
+
+  scaffold-nextjs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: scaffold, and require the verifier to pass
+        run: |
+          set -euo pipefail
+          bash capabilities/scaffold/scaffold.sh nextjs "$RUNNER_TEMP/web-app" 'CI probe | with & weird /chars/' | tee out.txt
+          grep -q 'verifier : PASS' out.txt || { echo "the scaffold verifier did not pass"; exit 1; }
+
+      - name: the gate is idempotent (next build rewrites tsconfig.json)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web-app"
+          rm -f .claude/.gate-state
+          for i in 1 2 3; do
+            rc=0; CLAUDE_PROJECT_DIR="$PWD" bash .claude/hooks/gate.sh </dev/null >/dev/null 2>&1 || rc=$?
+            [ "$rc" = 0 ] || { echo "gate run $i returned $rc on a clean tree"; exit 1; }
+          done
+
+      - name: the gate blocks a type error Turbopack does not check
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web-app"
+          printf 'export const x: number = "no";\n' > src/app/ci_broken.ts
+          rm -f .claude/.gate-state
+          rc=0; CLAUDE_PROJECT_DIR="$PWD" bash .claude/hooks/gate.sh </dev/null >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 2 ] || { echo "gate returned $rc, expected 2 (BLOCK)"; exit 1; }
+          rm -f src/app/ci_broken.ts .claude/.gate-state
+
+      - name: the loop guard releases once, then re-arms
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web-app"
+          printf 'export const x: number = "no";\n' > src/app/ci_broken.ts
+          rm -f .claude/.gate-state
+          seq=""
+          for _ in 1 2 3 4 5 6; do
+            rc=0; CLAUDE_PROJECT_DIR="$PWD" bash .claude/hooks/gate.sh </dev/null >/dev/null 2>&1 || rc=$?
+            seq="$seq$rc"
+          done
+          rm -f src/app/ci_broken.ts .claude/.gate-state
+          [ "$seq" = "220220" ] || { echo "guard sequence was $seq, expected 220220"; exit 1; }
+
+      - name: the container image builds
+        run: docker build -t forge-ci-web "$RUNNER_TEMP/web-app"

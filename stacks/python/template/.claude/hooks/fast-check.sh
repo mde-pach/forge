@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # PostToolUse - runs on the single file Claude just edited. Fast only (~50ms).
 # Cannot un-run the edit; exit 2 feeds the diagnostics back so Claude self-corrects.
-# Decisions come from EXIT CODES, never from grepping tool output - output
-# formats change between versions and a silently-passing gate is worse than none.
+# Decisions come from EXIT CODES, never from grepping tool output - output formats
+# change between versions and a silently-passing gate is worse than none.
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+require_jq
 
-input=$(cat)
-file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+file=$(jq -r '.tool_input.file_path // empty')
 case "$file" in *.py) ;; *) exit 0 ;; esac
-cd "${CLAUDE_PROJECT_DIR:-$PWD}" || exit 0
+cd "$FORGE_PROJECT_DIR" || exit 2
 [ -f "$file" ] || exit 0
 
 report=""
-fmt_out=$(uv run --frozen ruff format --check "$file" 2>&1) || \
+fmt_out=$(uv run ruff format --check "$file" 2>&1) || \
   report="${report}--- ruff format ---
 ${fmt_out}
 "
-lint_out=$(uv run --frozen ruff check "$file" 2>&1) || \
+lint_out=$(uv run ruff check "$file" 2>&1) || \
   report="${report}--- ruff check ---
 ${lint_out}
 "

@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: ${{ matrix.python-version }}
+
+      # --locked, not --frozen: the lockfile must already agree with
+      # pyproject.toml. A drifting lockfile fails here rather than being
+      # silently re-resolved to something nobody reviewed.
+      - name: Install from the lockfile, exactly
+        run: uv sync --locked --all-extras --dev
+
+      # CI runs THE SAME gate the Stop hook runs. One definition of green:
+      # if it passes locally it passes here, and neither can drift from the
+      # other, because there is only one of them.
+      - name: Quality gate (same script as the local hook)
+        env:
+          CLAUDE_PROJECT_DIR: ${{ github.workspace }}
+          FORGE_GATE_NO_RELEASE: "1"
+        run: bash .claude/hooks/gate.sh < /dev/null
+
+      - name: Prune cache
+        run: uv cache prune --ci
+
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The image builds
+        run: docker build -t __PROJECT__:ci .
