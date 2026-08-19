@@ -2,9 +2,8 @@
 # Three stages, following vercel/next.js examples/with-docker.
 # Requires `output: "standalone"` in next.config.ts.
 #
-# bun installs and builds; node runs. Next's standalone output ships a
-# server.js meant for node, so the runtime stage stays node - and staying node
-# keeps the final image free of a toolchain it never uses.
+# bun installs, node builds, node runs. See the builder stage for why the
+# middle one is not bun.
 ARG BUN_VERSION=1.2-slim
 ARG NODE_VERSION=22-slim
 
@@ -13,12 +12,19 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 RUN --mount=type=cache,target=/root/.bun bun install --frozen-lockfile
 
-FROM oven/bun:${BUN_VERSION} AS builder
+# bun installs; NODE builds. Next 16's production build cannot run under Bun:
+# it spawns worker_threads with options Bun has not implemented, then fails
+# loading a compiled CommonJS runtime ("Expected CommonJS module to have a
+# function wrapper"). Compilation and TypeScript both succeed; it dies in page
+# data collection. On a developer machine `bun run build` works because node is
+# on PATH and next's shebang wins - which is exactly why only the container
+# caught this.
+FROM node:${NODE_VERSION} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN bun run build
+RUN ./node_modules/.bin/next build
 
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app

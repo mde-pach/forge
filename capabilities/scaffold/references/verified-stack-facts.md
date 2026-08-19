@@ -72,3 +72,24 @@ Verified locally on a fresh scaffold: `biome ci` clean, `tsc --noEmit` clean.
 **Unverified in this sandbox:** container registry egress is blocked, so no image
 was pulled or built, and the `python3.14` uv tag was not confirmed. The templates
 pin 3.13 / node 22-slim, which are conservative. Verify on first `docker compose build`.
+
+## bun and Next.js 16 — install yes, build no (verified 2026-08-19, in CI)
+
+`bun install` works and produces `bun.lock`. **`next build` does not run under
+Bun.** Observed in a container with no node present:
+
+```
+Error [NotImplementedError]: worker_threads.Worker option "stdout" is not yet implemented in Bun.
+Error: Failed to load external module next/dist/compiled/next-server/app-page-turbo.runtime.prod.js:
+TypeError: Expected CommonJS module to have a function wrapper.
+> Build error occurred
+Error: Failed to collect page data for /
+```
+
+Compilation and TypeScript both succeed; it fails in page-data collection, which
+spawns workers and `externalRequire`s a compiled CommonJS runtime.
+
+This is invisible on a developer machine: `bun run build` succeeds there because
+node is on `PATH` and `next`'s shebang selects it. Only an image without node
+exposes it. So the template's Dockerfile installs with bun and builds with node,
+and the local gate's `bun run build` is fine as long as node is installed.
