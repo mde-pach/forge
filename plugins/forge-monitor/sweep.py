@@ -75,7 +75,7 @@ def main() -> int:
     me = sys.argv[1] if len(sys.argv) > 1 else None
     swept = []
 
-    for d in (state / "sessions", state / "store" / "sessions"):
+    for d in (state / "sessions",):
         if not d.is_dir():
             continue
         for f in sorted(d.glob("*.json")):
@@ -106,12 +106,19 @@ def main() -> int:
             tmp.replace(f)
             swept.append(f.stem)
 
-    # Anything swept in the local copy needs pushing, or the store keeps
-    # claiming those sessions are alive.
-    here = Path(__file__).resolve().parent
+    # Marking a record locally is not enough - the store would keep claiming
+    # those sessions are alive. Clearing published_at makes each one pending,
+    # and the flush that follows this sweep sends them.
     for sid in swept:
-        if (state / "sessions" / f"{sid}.json").exists():
-            os.system(f'bash "{here}/publish.sh" "{sid}" >/dev/null 2>&1 &')
+        f = state / "sessions" / f"{sid}.json"
+        try:
+            rec = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        rec.pop("published_at", None)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec, indent=2))
+        tmp.replace(f)
     return 0
 
 

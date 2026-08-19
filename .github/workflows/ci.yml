@@ -36,7 +36,7 @@ jobs:
           # most important scripts in the repo.
           mapfile -d '' files < <(find bootstrap capabilities scripts stacks plugins -name '*.sh' -type f -print0)
           printf 'checking %d scripts\n' "${#files[@]}"
-          [ "${#files[@]}" -ge 15 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
+          [ "${#files[@]}" -ge 14 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
           for f in "${files[@]}"; do bash -n "$f"; done
           # The hook fragments are sourced, never executed: tell shellcheck.
           shellcheck --shell=bash --external-sources --severity=warning "${files[@]}"
@@ -105,7 +105,7 @@ jobs:
       - name: the monitor cannot be seen by a session
         run: |
           set -euo pipefail
-          # 26 executable checks of the design claims: the emitter is silent on
+          # 31 executable checks of the design claims: the emitter is silent on
           # every event, can never block a turn, the unit is the session and not
           # the machine, publishing is coalesced but attention never waits, a
           # silent session is flagged rather than hidden, and no daemon is

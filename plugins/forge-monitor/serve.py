@@ -2,11 +2,15 @@
 """
 forge-monitor dashboard.
 
-The store is the source of truth. This process holds no state of its own: it
-pulls the store, reads every session record, and renders. That is what makes it
-runnable from anywhere - your laptop, another machine, a box that is always on -
-and why nothing breaks when it is not running at all. Sessions keep publishing;
-this is only a window.
+The store is the source of truth, and it is read live over the GitHub API - no
+clone, no pull, nothing on disk. Conditional requests make that free: GitHub
+does not count a 304 against the rate limit, so the page is current rather than
+current-as-of-the-last-sync.
+
+This process holds no durable state, which is what makes it runnable from
+anywhere - your laptop, another machine, a box that is always on - and why
+nothing breaks when it is not running at all. Sessions keep publishing; this is
+only a window.
 
     python3 serve.py [--port 7373] [--state DIR]
 """
@@ -14,56 +18,141 @@ this is only a window.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PULL_EVERY = 20  # seconds; a request inside this window reads what we have
 
 
 class Handler(SimpleHTTPRequestHandler):
-    last_pull = 0.0
-
     def __init__(self, *a, state: Path, **kw):
         self.state = state
         super().__init__(*a, directory=str(HERE / "dashboard"), **kw)
 
     # ---- data -------------------------------------------------------------
-    def _pull(self) -> None:
-        store = self.state / "store"
-        if not (store / ".git").is_dir():
-            return
-        if time.time() - Handler.last_pull < PULL_EVERY:
-            return
-        Handler.last_pull = time.time()
-        for cmd in (["git", "fetch", "--quiet", "--depth", "1", "origin"],
-                    ["git", "reset", "--quiet", "--hard", "FETCH_HEAD"]):
+    # The store is read live over the API, not from a clone. A conditional
+    # request costs nothing: GitHub does not count a 304 against the primary
+    # rate limit when it is correctly authorised, so polling hard is free and
+    # the page is genuinely current rather than current-as-of-the-last-pull.
+    _etag: str | None = None
+    _cache: dict[str, dict] = {}          # path -> {sha, record}
+    _last_good: list[dict] = []
+    _online: bool | None = None
+
+    def _cfg(self) -> dict:
+        try:
+            return json.loads((self.state / "config.json").read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def _token(self, cfg: dict) -> str | None:
+        for var in ("FORGE_MONITOR_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+            if os.environ.get(var):
+                return os.environ[var]
+        try:
+            r = subprocess.run(["gh", "auth", "token"], capture_output=True,
+                               text=True, timeout=10, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()
+        except (subprocess.SubprocessError, OSError):
+            pass
+        tf = (cfg.get("store") or {}).get("token_file")
+        if tf:
             try:
-                subprocess.run(cmd, cwd=store, capture_output=True, timeout=30, check=False)
-            except (subprocess.SubprocessError, OSError):
-                return
+                return Path(os.path.expanduser(tf)).read_text().strip() or None
+            except OSError:
+                pass
+        return None
+
+    def _api(self, url: str, tok: str, etag: str | None = None):
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {tok}")
+        req.add_header("Accept", "application/vnd.github+json")
+        req.add_header("X-GitHub-Api-Version", "2022-11-28")
+        req.add_header("User-Agent", "forge-monitor")
+        if etag:
+            req.add_header("If-None-Match", etag)
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                raw = r.read()
+                return r.status, (json.loads(raw) if raw else None), r.headers.get("ETag")
+        except urllib.error.HTTPError as e:
+            return e.code, None, e.headers.get("ETag")
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+            return 0, None, None
+
+    def _from_store(self) -> list[dict] | None:
+        cfg = self._cfg()
+        repo = (cfg.get("store") or {}).get("repo")
+        branch = (cfg.get("store") or {}).get("branch", "main")
+        if not repo:
+            return None
+        tok = self._token(cfg)
+        if not tok:
+            return None
+
+        url = f"https://api.github.com/repos/{repo}/contents/sessions?ref={branch}"
+        status, listing, etag = self._api(url, tok, Handler._etag)
+
+        if status == 304:
+            Handler._online = True
+            return Handler._last_good              # nothing changed; free
+        if status == 404:
+            Handler._online = True
+            Handler._last_good = []
+            return []                              # store exists, no sessions yet
+        if status != 200 or not isinstance(listing, list):
+            Handler._online = False
+            return Handler._last_good or None      # stale beats blank
+
+        Handler._online = True
+        Handler._etag = etag
+        fresh: dict[str, dict] = {}
+        for entry in listing:
+            name, sha = entry.get("name", ""), entry.get("sha")
+            if not name.endswith(".json") or not sha:
+                continue
+            hit = Handler._cache.get(name)
+            if hit and hit["sha"] == sha:
+                fresh[name] = hit                  # unchanged blob, no request
+                continue
+            st, blob, _ = self._api(
+                f"https://api.github.com/repos/{repo}/contents/sessions/{name}?ref={branch}", tok)
+            if st != 200 or not isinstance(blob, dict):
+                if hit:
+                    fresh[name] = hit
+                continue
+            try:
+                rec = json.loads(base64.b64decode(blob.get("content", "")).decode())
+            except (ValueError, UnicodeDecodeError):
+                continue
+            fresh[name] = {"sha": sha, "record": rec}
+        Handler._cache = fresh
+        Handler._last_good = [v["record"] for v in fresh.values()]
+        return Handler._last_good
 
     def _records(self) -> tuple[list[dict], str]:
-        """Store first. Local records only when there is no store, so a machine
-        that has not been configured yet still shows its own sessions."""
-        store = self.state / "store" / "sessions"
+        recs = self._from_store()
+        if recs is not None:
+            return recs, ("store" if Handler._online else "store (stale)")
         local = self.state / "sessions"
-        src, where = (store, "store") if store.is_dir() else (local, "local")
         out = []
-        for f in sorted(src.glob("*.json")):
+        for f in sorted(local.glob("*.json")):
             try:
                 out.append(json.loads(f.read_text()))
             except (OSError, ValueError):
                 continue
-        return out, where
+        return out, "local"
 
     def _snapshot(self) -> dict:
-        self._pull()
         recs, where = self._records()
         key = lambda r: r.get("attention_since") or r.get("last_seen") or ""  # noqa: E731
 

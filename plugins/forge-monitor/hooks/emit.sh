@@ -46,11 +46,18 @@ STATE="${FORGE_MONITOR_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/forge-monito
   # laptop that closed mid-session fires no SessionEnd, so its record would
   # claim to be running forever.
   if [ "$event" = "SessionStart" ]; then
-    timeout 20 python3 "$HERE/sweep.py" "$sid" >/dev/null 2>&1 || true
+    timeout 30 python3 "$HERE/sweep.py" "$sid" >/dev/null 2>&1 || true
+    timeout 60 python3 "$HERE/publish.py" --flush >/dev/null 2>&1 || true
   fi
 
+  # Publishing is a single API call, not a clone: one session owns one path,
+  # so an update is a PUT carrying that file's blob sha. --flush also drains
+  # anything an earlier failure left behind, which is how retry works here -
+  # a record whose last_seen is newer than its published_at is simply pending,
+  # and the next event on this machine sends it.
   if [ "$decision" = "publish" ] && [ -n "$sid" ]; then
-    timeout 60 bash "$HERE/publish.sh" "$sid" >/dev/null 2>&1 || true
+    timeout 60 python3 "$HERE/publish.py" "$sid" >/dev/null 2>&1 || true
+    timeout 60 python3 "$HERE/publish.py" --flush >/dev/null 2>&1 || true
   fi
 
   # Bound the raw logs. An unbounded file on a laptop is a bug that arrives in

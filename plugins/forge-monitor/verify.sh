@@ -84,9 +84,19 @@ print(r.get('state'), r.get('needs_attention'), r.get('stale'))")
   && no "a 5-day-old finished session was not forgotten" \
   || ok "finished records are forgotten once they are noise"
 
-echo "7. the store is the source of truth, and it is session-keyed"
-store="$FORGE_MONITOR_STATE/store/sessions"; mkdir -p "$store"
-python3 - "$store" <<'PY'
+echo "7. the dashboard reads the store, and degrades rather than blanking"
+snap() {  # $1 = state dir -> prints {"source":..,"waiting":[..]}
+  python3 - "$MON_DIR" "$1" <<'PYSNAP'
+import json, sys, importlib.util, pathlib
+spec = importlib.util.spec_from_file_location("srv", pathlib.Path(sys.argv[1]) / "serve.py")
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+h = m.Handler.__new__(m.Handler); h.state = pathlib.Path(sys.argv[2])
+s = h._snapshot()
+print(json.dumps({"source": s["source"], "waiting": [r["session_id"] for r in s["waiting"]]}))
+PYSNAP
+}
+loc="$TMP/local"; mkdir -p "$loc/sessions"
+python3 - "$loc/sessions" <<'PYFIX'
 import json, sys, pathlib
 d = pathlib.Path(sys.argv[1])
 (d/"s-a.json").write_text(json.dumps({"session_id":"s-a","host":"laptop","project":"api",
@@ -95,21 +105,39 @@ d = pathlib.Path(sys.argv[1])
 (d/"s-b.json").write_text(json.dumps({"session_id":"s-b","host":"desktop","project":"web",
   "state":"blocked","attention_reason":"permission request","needs_attention":True,
   "attention_since":"2025-12-31T00:00:00Z","last_seen":"2026-01-01T00:06:00Z"}))
-PY
-snap=$(python3 - "$MON_DIR" "$FORGE_MONITOR_STATE" <<'PY'
-import json, sys, importlib.util, pathlib
-spec = importlib.util.spec_from_file_location("srv", pathlib.Path(sys.argv[1]) / "serve.py")
-m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-h = m.Handler.__new__(m.Handler); h.state = pathlib.Path(sys.argv[2])
-s = h._snapshot()
-print(json.dumps({"source": s["source"], "waiting": [r["session_id"] for r in s["waiting"]]}))
-PY
-)
-echo "$snap" | grep -q '"source": "store"' && ok "the dashboard reads the store, not local files" \
-                                           || no "the dashboard did not use the store: $snap"
-echo "$snap" | grep -q '"waiting": \["s-b", "s-a"\]' \
+PYFIX
+out=$(snap "$loc")
+echo "$out" | grep -q '"waiting": \["s-b", "s-a"\]' \
   && ok "two sessions on two machines are just two sessions, oldest demand first" \
-  || no "wrong waiting order: $snap"
+  || no "wrong waiting order: $out"
+echo "$out" | grep -q '"source": "local"' \
+  && ok "with no store configured it still shows this machine" || no "unexpected source: $out"
+
+# A configured but unreachable store must not blank the page.
+echo '{"store":{"repo":"mde-pach/definitely-not-a-repo-xyz"}}' > "$loc/config.json"
+out=$(snap "$loc")
+echo "$out" | grep -qE '"source": "(local|store \(stale\))"' \
+  && ok "an unreachable store degrades instead of blanking" || no "unreachable store gave: $out"
+
+echo "7b. publishing needs no clone, and retries by being pending"
+{ [ -f "$MON_DIR/publish.py" ] && [ ! -f "$MON_DIR/publish.sh" ]; } \
+  && ok "publishing is an API call, not a git clone" || no "the git publisher is still here"
+if grep -q 'git clone' "$MON_DIR"/*.py "$MON_DIR"/hooks/*.sh 2>/dev/null; then
+  no "something still clones the store"
+else
+  ok "nothing clones the store"
+fi
+pend="$TMP/pend"; mkdir -p "$pend/sessions"
+printf '{"session_id":"p1","state":"working","last_seen":"2026-01-02T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}' > "$pend/sessions/p1.json"
+printf '{"session_id":"p2","state":"working","last_seen":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}' > "$pend/sessions/p2.json"
+got=$(python3 -c "
+import sys; sys.path.insert(0, '$MON_DIR'); import publish
+from pathlib import Path
+print(','.join(publish.pending(Path('$pend'))))")
+[ "$got" = "p1" ] && ok "a record newer than its last publish is pending; retry needs no queue" \
+                  || no "expected pending=p1, got '$got'"
+rc=0; FORGE_MONITOR_STATE="$pend" python3 "$MON_DIR/publish.py" --flush >/dev/null 2>&1 || rc=$?
+[ "$rc" = 0 ] && ok "publishing with no store or token exits 0 silently" || no "publish exited $rc"
 
 echo "8. nothing is installed at user scope, and nothing is session-facing"
 US="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
@@ -132,8 +160,11 @@ PY
 [ -z "$bad" ] && ok "every hook reaches the emitter via \${CLAUDE_PLUGIN_ROOT}" || no "bad hooks: $bad"
 
 echo "9. no daemon is required for the state to be true"
-[ -f "$MON_DIR/collector.py" ] || [ -f "$MON_DIR/merge.py" ] || [ -f "$MON_DIR/run.sh" ] \
-  && no "a background process is back" || ok "no collector, no merge step, no daemon"
+if [ -f "$MON_DIR/collector.py" ] || [ -f "$MON_DIR/merge.py" ] || [ -f "$MON_DIR/run.sh" ]; then
+  no "a background process is back"
+else
+  ok "no collector, no merge step, no daemon"
+fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

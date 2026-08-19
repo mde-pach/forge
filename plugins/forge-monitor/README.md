@@ -37,17 +37,26 @@ there is **no daemon**: nothing has to be running for the state to be true.
   a session, which knows none of this
      │  hooks (async, silent, always exit 0)
      ▼
-  emit.sh ──► sessions/<id>.json ──► publish.sh ──► private repo
-     │                                              (one file per session)
-     └─ on SessionStart: sweep.py                          │
-                                                           ▼
+  emit.sh ──► sessions/<id>.json ──► publish.py ──PUT──► private repo
+     │                                (one API call)   (one file per session)
+     └─ on SessionStart: sweep.py                            │
+                                                        GET + ETag
+                                                             ▼
                                               serve.py ──► dashboard ──► your phone
-                                              (pulls the repo; holds no state)
+                                              (no clone, no state)
 ```
 
-`publish.sh` writes exactly one file — this session's. Two sessions never touch
-the same path, so a concurrent push is a rebase-and-retry, never a conflict.
-That is the practical payoff of making the session the unit.
+`publish.py` writes exactly one file — this session's — with a single
+`PUT /repos/<you>/forge-state/contents/sessions/<id>.json`. There is no clone
+anywhere: not on the machines that publish, not on the machine that displays.
+One session owns one path, so an update needs nothing but that file's blob sha,
+and two sessions never contend. History is kept, because every PUT is a commit.
+
+The dashboard reads the same store live, with a conditional request. GitHub's
+own words: *"Making a conditional request does not count against your primary
+rate limit if a `304` response is returned"* — so polling hard is free, and the
+page is current rather than current-as-of-the-last-sync. Only blobs whose sha
+changed are fetched; everything else is served from what it already has.
 
 ## The three properties, each of them a test
 
@@ -106,7 +115,7 @@ gh repo create <you>/forge-state --private
 }
 ```
 
-**To look at it**, from any machine that can clone the store:
+**To look at it**, from any machine that can reach the API:
 
 ```bash
 python3 serve.py                  # http://127.0.0.1:7373
@@ -129,9 +138,12 @@ rather than a session id to retype.
 
 ## Known holes
 
-- **Never tested against a real session.** Every test uses payloads written by
-  hand from documentation. If a field name is wrong, the dashboard shows an
-  empty waiting list forever and nothing fails. This is the first thing to fix.
+- **Never tested against a real session, or a real store.** Every test uses
+  payloads written by hand from documentation, and this sandbox gets a 403 from
+  `api.github.com`, so neither the PUT nor the conditional GET has ever run
+  against GitHub. If a field name or a response shape is wrong, the dashboard
+  shows an empty waiting list forever and nothing fails loudly. This is the
+  first thing to fix.
 - **Cloud sessions run the plugin but cannot publish** — the container is
   isolated and discarded, and giving it a credential means giving the agent one.
   Undecided.
