@@ -34,7 +34,7 @@ jobs:
           # find, not globstar: `**` does not descend into dot-directories, so a
           # glob would silently skip stacks/*/template/.claude/hooks/*.sh - the
           # most important scripts in the repo.
-          mapfile -d '' files < <(find bootstrap capabilities scripts stacks monitor -name '*.sh' -type f -print0)
+          mapfile -d '' files < <(find bootstrap capabilities scripts stacks plugins -name '*.sh' -type f -print0)
           printf 'checking %d scripts\n' "${#files[@]}"
           [ "${#files[@]}" -ge 16 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
           for f in "${files[@]}"; do bash -n "$f"; done
@@ -109,7 +109,7 @@ jobs:
           # silent on every event, cannot block a turn, ships no skill or
           # manifest, never lands in a project's .claude/, and the sink is
           # swappable. If any of that stops being true, this goes red.
-          bash monitor/verify.sh
+          bash plugins/forge-monitor/verify.sh
 
       - name: the monitor is not a capability
         run: |
@@ -117,11 +117,38 @@ jobs:
           # It is deliberately outside the contract: a capability is something a
           # session invokes, and nothing here may be invocable. Guard the
           # boundary rather than trusting it to stay put.
-          if find monitor -name SKILL.md -o -name manifest.yaml | grep -q .; then
-            echo "monitor/ grew a session-facing surface"; exit 1
+          if find plugins/forge-monitor -name SKILL.md -o -name manifest.yaml | grep -q .; then
+            echo "the monitor grew a session-facing surface"; exit 1
           fi
-          if [ -d capabilities/monitor ]; then
+          if [ -d capabilities/monitor ] || [ -d capabilities/forge-monitor ]; then
             echo "the monitor was moved under capabilities/"; exit 1
+          fi
+          # And nothing in this repo may install itself at user scope: global
+          # config is not reproducible and leaks into unrelated work.
+          if grep -rn 'HOME/\.claude/settings\.json\|~/\.claude/settings\.json' \
+               --include='*.sh' --include='*.py' bootstrap capabilities plugins scripts \
+             | grep -v 'verify\.sh' | grep -qv '^$'; then
+            echo "something writes user-scope settings; everything must be packaged"
+            grep -rn 'HOME/\.claude/settings\.json\|~/\.claude/settings\.json' \
+              --include='*.sh' --include='*.py' bootstrap capabilities plugins scripts | grep -v 'verify\.sh'
+            exit 1
+          fi
+
+      - name: the plugin and marketplace manifests are valid
+        run: |
+          set -euo pipefail
+          # `claude plugin validate` checks plugin.json, hooks.json syntax, and
+          # for the marketplace: schema, duplicate names and source traversal.
+          # A malformed hooks.json silently disables the entire plugin, which is
+          # exactly the looks-on-but-off failure this repo exists to prevent.
+          if command -v claude >/dev/null 2>&1; then
+            claude plugin validate ./plugins/forge-monitor
+            claude plugin validate .
+          else
+            python3 -c "import json;json.load(open('.claude-plugin/marketplace.json'))"
+            python3 -c "import json;json.load(open('plugins/forge-monitor/.claude-plugin/plugin.json'))"
+            python3 -c "import json;json.load(open('plugins/forge-monitor/hooks/hooks.json'))"
+            echo "claude CLI absent; validated JSON syntax only"
           fi
 
       - name: the docs build, with dead links treated as failures
