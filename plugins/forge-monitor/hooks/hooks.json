@@ -1,38 +1,181 @@
 {
-  "description": "Records session lifecycle and attention events. Writes nothing to stdout on any event, so no session can observe this plugin; always exits 0, so it can never block a turn.",
+  "description": "Records session lifecycle and attention events and publishes them to the store. Runs async so it is never on the critical path of a turn, writes nothing to stdout on any event so no session can observe it, and always exits 0 so it can never block one.",
   "hooks": {
     "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "SessionStart"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "SessionStart"
+            ],
+            "timeout": 90,
+            "async": true
+          }
+        ]
+      }
     ],
     "SessionEnd": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "SessionEnd"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "SessionEnd"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "Notification": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "Notification"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "Notification"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "Stop"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "Stop"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "StopFailure": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "StopFailure"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "StopFailure"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "SubagentStart": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "SubagentStart"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "SubagentStart"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "SubagentStop": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "SubagentStop"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "SubagentStop"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "TeammateIdle": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "TeammateIdle"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "TeammateIdle"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "TaskCreated": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "TaskCreated"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "TaskCreated"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "TaskCompleted": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "TaskCompleted"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "TaskCompleted"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ],
     "PreCompact": [
-      { "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh", "PreCompact"], "timeout": 5 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
+              "PreCompact"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }

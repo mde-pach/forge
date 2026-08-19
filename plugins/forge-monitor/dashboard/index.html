@@ -44,6 +44,11 @@
   .why.mute{color:var(--dim);font-weight:400}
   .meta{color:var(--dimmer);font:400 12px/1.45 var(--mono);margin-top:5px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card.stale{opacity:.62}
+  .resume{margin-top:9px;background:transparent;border:1px solid var(--line);color:var(--dim);
+    border-radius:8px;padding:6px 10px;font:500 12px/1 var(--mono);cursor:pointer;
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .resume:active{background:var(--line)}
   .empty{color:var(--dimmer);font-size:14.5px;padding:14px 2px}
   .err{background:color-mix(in srgb,var(--dead) 12%,var(--card));
     border:1px solid color-mix(in srgb,var(--dead) 40%,var(--line));
@@ -72,7 +77,7 @@ const DOT = { blocked:"w", working:"r", idle:"i", ended:"d", gone:"d", failed:"f
 
 function card(s, waiting){
   const el = document.createElement("div");
-  el.className = "card" + (waiting ? " w" : "");
+  el.className = "card" + (waiting ? " w" : "") + (s.stale ? " stale" : "");
   const cls = waiting ? "w" : (DOT[s.state] || "i");
   const stamp = s.attention_since || s.last_seen;
   el.innerHTML = `
@@ -80,15 +85,33 @@ function card(s, waiting){
     <div class="body">
       <div class="top">
         <div class="proj"></div>
-        <div class="since">${ago(stamp)}</div>
+        <div class="since"></div>
       </div>
       <div class="why ${waiting ? "" : "mute"}"></div>
       <div class="meta"></div>
+      <button class="resume" type="button"></button>
     </div>`;
-  el.querySelector(".proj").textContent = s.name || s.project || "(no project)";
-  el.querySelector(".why").textContent  = s.attention_reason || s.state || "";
-  const bits = [s.host, s.project, String(s.session_id || "").slice(0, 8)].filter(Boolean);
-  el.querySelector(".meta").textContent = bits.join(" · ");
+  el.querySelector(".proj").textContent = s.project || s.name || "(no project)";
+  el.querySelector(".since").textContent = ago(stamp) + (s.stale ? " ?" : "");
+  el.querySelector(".why").textContent =
+    (s.attention_reason || s.state || "") + (s.stale ? " · not heard from since" : "");
+  el.querySelector(".meta").textContent =
+    [s.host, s.cwd, String(s.session_id || "").slice(0, 8)].filter(Boolean).join(" · ");
+
+  // What you would type to pick this session back up. The dashboard is a
+  // window, not a remote control - it cannot resume anything for you, so the
+  // least it can do is hand you the exact command instead of the session id.
+  const cmd = s.cwd
+    ? `cd ${s.cwd} && claude --resume ${s.session_id}`
+    : `claude --resume ${s.session_id}`;
+  const btn = el.querySelector(".resume");
+  btn.textContent = "copy resume command";
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try { await navigator.clipboard.writeText(cmd); btn.textContent = "copied"; }
+    catch { btn.textContent = cmd; }
+    setTimeout(() => { btn.textContent = "copy resume command"; }, 2500);
+  });
   return el;
 }
 
@@ -115,7 +138,7 @@ async function tick(){
     const root = $("root");
     root.replaceChildren();
     root.append(section("waiting on you", d.waiting || [], true));
-    root.append(section("running",        d.active  || [], false));
+    root.append(section("running",        d.running || [], false));
     if((d.recent || []).length) root.append(section("recently finished", d.recent, false));
 
     const age = $("age");
@@ -124,10 +147,9 @@ async function tick(){
 
     const n = (d.waiting || []).length;
     document.title = n ? `(${n}) sessions` : "sessions";
-    const machines = Object.keys(d.machines || {});
-    $("foot").textContent = machines.length
-      ? `${(d.active||[]).length} running · ${machines.length} machine(s): ${machines.join(", ")}`
-      : `${(d.active||[]).length} running · this machine only`;
+    $("foot").textContent =
+      `${(d.running||[]).length} running · reading the ` +
+      (d.source === "store" ? "shared store" : "local machine only — no store configured");
   }catch(err){
     // Never blank the screen on a transient failure: stale data beats no data,
     // and a phone on a flaky connection produces a lot of transient failures.

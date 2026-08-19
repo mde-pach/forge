@@ -1,90 +1,84 @@
 # forge-monitor
 
-Session monitoring that the session cannot see.
+See what your sessions are doing, from anywhere, without running anything.
 
-## The constraint that shaped this
+## The idea in one paragraph
 
-> "the agent/session himself shouldn't have any knowledge of this layer.
-> everything must be totally separated and enforced by other automated
-> mechanism not on the agent hand… the agent/session context and usage must not
-> be polluted by this mechanism"
+A **session** is the unit. Not a machine, not an agent — two sessions on two
+machines are just two sessions, and which computer they happen to run on is a
+field on the record like the working directory. Each session keeps its own
+record current, publishes it to a private GitHub repository, and that repository
+is the source of truth. A dashboard is a window onto it: run it wherever you
+like, or nowhere at all, and the state stays correct either way.
 
-That rules out the obvious designs. Not a skill, not an MCP server, not a tool,
-not a `CLAUDE.md` instruction to report status, not a capability. All of those
-work by asking the agent to participate, which costs context and — worse —
-makes the observation only as reliable as the agent's compliance.
+## How it works
 
-**So this is not a capability.** Capabilities are things a session invokes.
-This is something a session is *subject to*. It ships outside
-`capabilities/`, has no `manifest.yaml` and no `SKILL.md`, and forge's own CI
-asserts that it never grows one.
+Claude Code fires **hooks** — small programs it runs when something happens: a
+session starts, it needs your input, a turn ends. This plugin registers one
+program on eleven of those events, and it does three things:
 
-## Why it can be invisible
+1. appends the raw payload to a local log,
+2. folds the event into `sessions/<session-id>.json`,
+3. sometimes pushes that one file to the store.
 
-Claude Code's hook contract makes it mechanically possible:
+"Sometimes" is the interesting part. Pushing on every event would mean thousands
+of commits a day, so the policy is: **anything that changes what you would want
+to know publishes immediately** — a session starting, ending, failing, or asking
+for you — and everything else is rate-limited to one push every two minutes.
+Attention never waits, because attention is the entire point.
 
-> "Stdout is written to the debug log only, not shown in the transcript. Claude
-> never sees it."
-> — [hooks](https://code.claude.com/docs/en/hooks)
+Every hook is registered `async: true`, so Claude Code does not wait for it.
+That is what makes it safe for a hook to touch the network at all, and it is why
+there is **no daemon**: nothing has to be running for the state to be true.
 
-Three events are exceptions, where stdout *is* injected as context:
-`SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`. So the emitter prints
-nothing, ever, and the installer does not subscribe to two of the three at all.
-Not subscribing is a stronger guarantee than remembering to stay quiet.
-
-The statusline is the second invisible channel, and the richest: the runtime
-pipes session id, cwd, model, cost, context-window usage, rate limits, git
-worktree and PR state into it every turn, and renders the result as chrome for
-the human. The model never sees it.
-
-## Shape
+## What runs where
 
 ```
-  session (knows nothing)
-     │
-     │  hooks: SessionStart/End, Notification, Stop/StopFailure,
-     │         Subagent*, Task*, TeammateIdle, PreCompact
-     │  statusline: per-turn heartbeat
+  a session, which knows none of this
+     │  hooks (async, silent, always exit 0)
      ▼
-  emit.sh ──append──► events.ndjson        (local, no network, always exit 0)
-                            │
-                            ▼
-                      collector.py          ← separate process, its own identity
-                       │        │
-                       │        └─ polls `claude agents --json --all`
-                       ▼
-                    sinks/*.sh              ← the replaceable edge
-                       │
-          ┌────────────┴────────────┐
-          ▼                         ▼
-     github.sh                   file.sh
-   private state repo        a local directory
+  emit.sh ──► sessions/<id>.json ──► publish.sh ──► private repo
+     │                                              (one file per session)
+     └─ on SessionStart: sweep.py                          │
+                                                           ▼
+                                              serve.py ──► dashboard ──► your phone
+                                              (pulls the repo; holds no state)
 ```
 
-Three properties, each of them a test in `verify.sh` rather than a promise:
+`publish.sh` writes exactly one file — this session's. Two sessions never touch
+the same path, so a concurrent push is a rebase-and-retry, never a conflict.
+That is the practical payoff of making the session the unit.
+
+## The three properties, each of them a test
 
 1. **Silent.** The emitter writes zero bytes to stdout and stderr on every
-   event, including the three context-bearing ones.
-2. **Harmless.** It always exits 0 — on malformed input, on no input, on an
-   unwritable state directory. Exit 2 is a *blocking* error on several events;
-   a monitor that can stop a turn eventually will, at the worst moment. This
-   inverts the rule the quality gates use, on purpose: a gate must fail closed,
-   a monitor must fail open.
-3. **Separable.** The sink is a process with a one-object stdin contract, not
-   an import. `file.sh` is twelve lines and exists to prove that replacing the
-   backend touches nothing else.
+   event. Claude Code shows a hook's stdout to the model on exactly three events
+   (`SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`); printing nothing
+   means the session cannot observe this layer on any of them.
+2. **Harmless.** It always exits 0 — on malformed input, no input, an
+   unwritable state directory, a stripped environment. Exit 2 is a *blocking*
+   error on several events. A gate must fail closed; a monitor must fail open,
+   because a monitor that can stop a turn eventually will, at the worst moment.
+3. **Session-keyed.** Nothing is stored per machine. `verify.sh` fails if a
+   machine-keyed directory ever appears.
 
-The agent also cannot *reach* the state store: publishing happens in the
-collector, with a credential in the collector's own config, absent from every
-session's environment. The observer is not the observed.
+## What happens when a session dies
 
-## Install
+A closed laptop lid fires no `SessionEnd`, so a record would claim to be running
+forever. There is no watchdog, because there is no daemon. Instead **the next
+session to start sweeps**: the system repairs itself at the only moment the
+repair matters.
 
-Nothing goes into `~/.claude`. This is a **plugin**, so it is declared per
-project, versioned, and reproduces identically in any environment — including
-Claude Code cloud sessions, which read the repo and never your machine.
+The sweep is deliberately conservative. A session blocked on a permission prompt
+emits nothing *precisely because it is waiting for you* — that is the most
+important row on the dashboard, and hiding it would be the worst possible
+outcome. So a stale record keeps its state and its reason and is only **flagged**;
+the page shows it greyed with "not heard from since". Records are only deleted
+once they have finished and gone quiet for three days.
 
-In a project's `.claude/settings.json`, committed:
+## Setup
+
+**Per project**, in a committed `.claude/settings.json`:
 
 ```json
 {
@@ -95,116 +89,54 @@ In a project's `.claude/settings.json`, committed:
 }
 ```
 
-Then create the store once — this is not optional, it is the only place the
-machines meet:
+**Once**, the store — no personal access token needed:
 
 ```bash
-gh auth login && gh auth setup-git
+gh auth login && gh auth setup-git    # points git's credential helper at gh
 gh repo create <you>/forge-state --private
 ```
 
-```json
-{ "sink": { "type": "github", "repo": "<you>/forge-state" } }
+```jsonc
+// ~/.local/state/forge-monitor/config.json
+{
+  "store": { "repo": "<you>/forge-state", "branch": "main" },
+  "min_publish_seconds": 120,   // rate limit for non-urgent events
+  "stale_minutes": 45,          // silence after which a record is flagged
+  "forget_hours": 72            // when finished records are deleted
+}
 ```
 
-Then, on each machine that should collect:
+**To look at it**, from any machine that can clone the store:
 
 ```bash
-bash plugins/forge-monitor/verify.sh            # 26 checks, all executable
-bash plugins/forge-monitor/run.sh               # collector + dashboard
-bash plugins/forge-monitor/tailscale/expose.sh  # reach it from your phone
+python3 serve.py                  # http://127.0.0.1:7373
+bash tailscale/expose.sh          # prints your tailnet URL
 ```
 
-An earlier version installed hooks into `~/.claude/settings.json`. That was
-wrong: global config makes every session on the machine carry the monitor
-whether or not the work has anything to do with forge, and it reproduces
-nowhere. Packaging gives isolation and reproducibility for free, and it is why
-the cloud-session gap closed on its own — a plugin declared in the repo is
-installed at session start wherever the session runs.
-
-Point it somewhere by editing `config.json` in the state directory:
-
-```json
-{ "sink": { "type": "github", "repo": "you/forge-state" } }
-```
-
-**No personal access token is needed.** The GitHub sink prefers git's credential
-helper, which `gh` configures once:
-
-```bash
-gh auth login          # device flow, no secret typed or stored by us
-gh auth setup-git      # points git at gh as its credential helper
-gh repo create you/forge-state --private
-```
-
-After that a plain `git push` authenticates as you, with nothing on disk to
-rotate and `gh auth logout` as the revoke. The sink falls back to `gh auth
-token` (read at push time, never written) and only then to a `token_file`, for
-machines with no `gh`. It reports which one it used, because a sink that
-silently stops publishing is worse than one that says why.
+`tailscale serve`, never `tailscale funnel`: serve reaches devices on your
+tailnet, funnel publishes to the internet, and for session state that
+distinction is the whole security model. `expose.sh` is generic on purpose —
+`bash tailscale/expose.sh 3000` works for any local service.
 
 ## The dashboard
 
-`serve.py` binds **loopback only** and serves a single-file page: waiting-on-you
-first, then running, then recently finished — each with why, which machine, and
-how long. It polls every 10s, refreshes on focus, and puts the waiting count in
-the title so a home-screen shortcut shows it.
+Waiting-on-you first, oldest demand at the top, because the thing that has been
+waiting longest is the thing you most need to see. Then running, then recently
+finished. Each row carries the project, the machine, the working directory, how
+long, and a **copy resume command** button — this is a window, not a remote
+control, so the least it can do is hand you `cd <cwd> && claude --resume <id>`
+rather than a session id to retype.
 
-Reaching it from your phone is `tailscale serve`, never `tailscale funnel`:
-serve reaches devices on your tailnet, funnel publishes to the internet. For
-session state that distinction is the whole security model, so `expose.sh`
-does not offer funnel at all. Nothing is published, no port is opened, and
-there is no certificate to renew.
+## Known holes
 
-`expose.sh` is deliberately generic — it is the reachability primitive for the
-rest of the stack too:
-
-```bash
-bash tailscale/expose.sh          # the dashboard on 7373
-bash tailscale/expose.sh 3000     # a dev server
-bash tailscale/expose.sh --status
-```
-
-## Why the store is not optional
-
-An earlier version of this README implied the sink was a nice-to-have because
-the dashboard could read local state directly. That was wrong, and the reason it
-was wrong is structural:
-
-- `claude agents` spans **one machine**, and an event log lives on the disk that
-  wrote it. Two machines have no way to see each other except through a shared
-  store.
-- A **cloud session** runs the plugin — but in an isolated container. Its events
-  never reach your laptop's filesystem. Without something that ships them out,
-  the cloud coverage the plugin appears to buy is not real (see below).
-- With the laptop asleep, a dashboard served *from* the laptop is unreachable.
-  The store still holds the last known state.
-- State on one disk is state that dies with a reinstall. There is no history.
-
-So the flow is store-first: each machine's collector publishes its own
-`sessions/<host>/snapshot.json`, `merge.py` folds every host into one
-`snapshot.json`, and the dashboard reads *that*, falling back to local state
-only when no store is configured yet. Demands are sorted oldest-first, because
-the thing that has been waiting longest is the thing you most need to see.
-
-## The cloud-session hole, stated plainly
-
-Making this a plugin means a cloud session *runs* it. It does not mean the
-events arrive: the container is isolated and discarded. Closing that needs a
-credential inside the cloud environment so the session can push its own state —
-and in a cloud container the agent can read anything the hooks can, so that
-credential is reachable by the agent. It should therefore be scoped to the state
-repo and nothing else, and the blast radius is "a session could corrupt its own
-monitoring data". That is a decision, not a detail, and it is unmade.
-
-## What it does not do
-
-- **It does not push.** Real-time "something needs you" is already native
-  (Remote Control's *Push when actions required*). This layer answers the other
-  question: what is running, where, and what has been waiting how long.
-- **It is not real-time.** State moves at collector cadence, 30s by default.
-- **The statusline is opt-in.** A plugin's `settings.json` supports only the
-  `agent` and `subagentStatusLine` keys, so `statusline.sh` cannot be installed
-  by the plugin. Point your own `statusLine` at it if you want the richer
-  per-turn heartbeat (cost, context-window usage, rate limits); the hooks work
-  without it.
+- **Never tested against a real session.** Every test uses payloads written by
+  hand from documentation. If a field name is wrong, the dashboard shows an
+  empty waiting list forever and nothing fails. This is the first thing to fix.
+- **Cloud sessions run the plugin but cannot publish** — the container is
+  isolated and discarded, and giving it a credential means giving the agent one.
+  Undecided.
+- **No notifications.** The dashboard answers "what is the state", never "come
+  look now". `ntfy` from `publish.sh` is the cheap next step.
+- **The statusline is opt-in.** A plugin's settings support only two keys, so
+  `statusline.sh` cannot be installed by the plugin. Point your own `statusLine`
+  at it for cost, context-window and rate-limit numbers.

@@ -36,7 +36,7 @@ jobs:
           # most important scripts in the repo.
           mapfile -d '' files < <(find bootstrap capabilities scripts stacks plugins -name '*.sh' -type f -print0)
           printf 'checking %d scripts\n' "${#files[@]}"
-          [ "${#files[@]}" -ge 16 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
+          [ "${#files[@]}" -ge 15 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
           for f in "${files[@]}"; do bash -n "$f"; done
           # The hook fragments are sourced, never executed: tell shellcheck.
           shellcheck --shell=bash --external-sources --severity=warning "${files[@]}"
@@ -123,6 +123,12 @@ jobs:
           if [ -d capabilities/monitor ] || [ -d capabilities/forge-monitor ]; then
             echo "the monitor was moved under capabilities/"; exit 1
           fi
+          # No daemon: the state must stay true with nothing running.
+          for f in collector.py merge.py run.sh; do
+            if [ -e "plugins/forge-monitor/$f" ]; then
+              echo "a background process is back: $f"; exit 1
+            fi
+          done
           # And nothing in this repo may install itself at user scope: global
           # config is not reproducible and leaks into unrelated work.
           if grep -rn 'HOME/\.claude/settings\.json\|~/\.claude/settings\.json' \
