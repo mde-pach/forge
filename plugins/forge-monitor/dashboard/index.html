@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>sessions</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%233fb950'/></svg>">
+<style>
+  :root{
+    --bg:#0e1116; --card:#161b22; --line:#262e3a; --ink:#e6edf3;
+    --dim:#8b98a9; --dimmer:#5e6b7d;
+    --wait:#e3a008; --run:#3fb950; --dead:#f2555a; --idle:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{--bg:#fbfcfd;--card:#fff;--line:#e2e6eb;--ink:#12161c;--dim:#5c6873;--dimmer:#8a949e}
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;
+    padding:max(12px,env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing:antialiased}
+  header{display:flex;align-items:baseline;gap:10px;margin:4px 2px 14px}
+  h1{font-size:19px;margin:0;letter-spacing:-.01em}
+  .age{color:var(--dimmer);font:500 12px/1 var(--mono);margin-left:auto}
+  .age.stale{color:var(--wait)}
+  h2{font:600 11.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;
+     color:var(--dim);margin:22px 2px 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;
+    padding:13px 14px;margin-bottom:9px;display:flex;gap:12px;align-items:flex-start}
+  .card.w{border-color:color-mix(in srgb,var(--wait) 45%,var(--line))}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:6px}
+  .dot.w{background:var(--wait);box-shadow:0 0 0 4px color-mix(in srgb,var(--wait) 18%,transparent)}
+  .dot.r{background:var(--run)} .dot.i{background:var(--idle)} .dot.d{background:var(--dimmer)}
+  .dot.f{background:var(--dead)}
+  .body{min-width:0;flex:1}
+  .top{display:flex;align-items:baseline;gap:8px}
+  .proj{font-weight:650;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .since{margin-left:auto;font:500 12px/1 var(--mono);color:var(--dimmer);flex:none}
+  .why{color:var(--wait);font-size:14px;margin-top:3px;font-weight:550}
+  .why.mute{color:var(--dim);font-weight:400}
+  .meta{color:var(--dimmer);font:400 12px/1.45 var(--mono);margin-top:5px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .empty{color:var(--dimmer);font-size:14.5px;padding:14px 2px}
+  .err{background:color-mix(in srgb,var(--dead) 12%,var(--card));
+    border:1px solid color-mix(in srgb,var(--dead) 40%,var(--line));
+    border-radius:11px;padding:12px 14px;color:var(--ink);font-size:14px}
+  footer{margin-top:26px;color:var(--dimmer);font:400 11.5px/1.5 var(--mono);text-align:center}
+</style>
+</head>
+<body>
+<header><h1>sessions</h1><span class="age" id="age">—</span></header>
+<div id="root"><div class="empty">loading…</div></div>
+<footer id="foot"></footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function ago(iso){
+  if(!iso) return "";
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60)    return Math.round(s) + "s";
+  if (s < 3600)  return Math.round(s / 60) + "m";
+  if (s < 86400) return Math.round(s / 3600) + "h";
+  return Math.round(s / 86400) + "d";
+}
+
+const DOT = { blocked:"w", working:"r", idle:"i", ended:"d", gone:"d", failed:"f", stopped:"d", done:"d" };
+
+function card(s, waiting){
+  const el = document.createElement("div");
+  el.className = "card" + (waiting ? " w" : "");
+  const cls = waiting ? "w" : (DOT[s.state] || "i");
+  const stamp = s.attention_since || s.last_seen;
+  el.innerHTML = `
+    <div class="dot ${cls}"></div>
+    <div class="body">
+      <div class="top">
+        <div class="proj"></div>
+        <div class="since">${ago(stamp)}</div>
+      </div>
+      <div class="why ${waiting ? "" : "mute"}"></div>
+      <div class="meta"></div>
+    </div>`;
+  el.querySelector(".proj").textContent = s.name || s.project || "(no project)";
+  el.querySelector(".why").textContent  = s.attention_reason || s.state || "";
+  const bits = [s.host, s.project, String(s.session_id || "").slice(0, 8)].filter(Boolean);
+  el.querySelector(".meta").textContent = bits.join(" · ");
+  return el;
+}
+
+function section(title, rows, waiting){
+  const frag = document.createDocumentFragment();
+  const h = document.createElement("h2"); h.textContent = title; frag.append(h);
+  if(!rows.length){
+    const e = document.createElement("div"); e.className = "empty";
+    e.textContent = waiting ? "Nothing needs you." : "None.";
+    frag.append(e);
+  } else rows.forEach(s => frag.append(card(s, waiting)));
+  return frag;
+}
+
+let lastGood = 0;
+
+async function tick(){
+  try{
+    const r = await fetch("snapshot.json?t=" + Date.now(), {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    lastGood = Date.now();
+
+    const root = $("root");
+    root.replaceChildren();
+    root.append(section("waiting on you", d.waiting || [], true));
+    root.append(section("running",        d.active  || [], false));
+    if((d.recent || []).length) root.append(section("recently finished", d.recent, false));
+
+    const age = $("age");
+    age.textContent = ago(d.generated_at) + " ago";
+    age.classList.toggle("stale", (Date.now() - Date.parse(d.generated_at)) > 180000);
+
+    const n = (d.waiting || []).length;
+    document.title = n ? `(${n}) sessions` : "sessions";
+    $("foot").textContent = `${(d.active||[]).length} running · updated ${d.generated_at || "?"}`;
+  }catch(err){
+    // Never blank the screen on a transient failure: stale data beats no data,
+    // and a phone on a flaky connection produces a lot of transient failures.
+    if(!lastGood){
+      $("root").replaceChildren(
+        Object.assign(document.createElement("div"),
+          {className:"err", textContent:"Cannot reach the collector: " + err.message}));
+    }
+    $("age").classList.add("stale");
+    $("foot").textContent = "disconnected · retrying";
+  }
+}
+
+tick();
+setInterval(tick, 10000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "forge",
+  "description": "maxime's personal operating framework — packaged, so nothing has to be installed at user scope and every environment reproduces the same setup.",
+  "owner": { "name": "mde-pach", "url": "https://github.com/mde-pach" },
+  "plugins": [
+    {
+      "name": "forge-monitor",
+      "source": "./plugins/forge-monitor",
+      "description": "Out-of-band session observation: records lifecycle and attention events for an external collector, and adds no skill, no tool, no MCP server and no context to the session.",
+      "version": "0.1.0",
+      "category": "observability"
+    }
+  ]
+}

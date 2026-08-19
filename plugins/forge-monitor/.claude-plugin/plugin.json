@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "forge-monitor",
+  "displayName": "forge · session monitor",
+  "version": "0.1.0",
+  "description": "Out-of-band session observation. Records session lifecycle and attention events for an external collector; adds no skill, no tool, no MCP server and no context.",
+  "author": { "name": "mde-pach", "url": "https://github.com/mde-pach" },
+  "repository": "https://github.com/mde-pach/forge",
+  "license": "MIT",
+  "keywords": ["monitoring", "observability", "sessions"]
+}

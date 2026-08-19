@@ -27,5 +27,16 @@
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "forge": {
+      "source": {
+        "source": "github",
+        "repo": "mde-pach/forge"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "forge-monitor@forge": true
   }
 }
