@@ -47,15 +47,36 @@ jobs:
           pip install pyyaml
           python3 scripts/validate-manifests.py
 
-      - name: hooks are executable in git's index
+      - name: hooks are invoked in a way the exec bit cannot break
         run: |
           set -euo pipefail
-          bad=0
-          while IFS= read -r f; do
-            mode=$(git ls-files -s "$f" | cut -d' ' -f1)
-            [ "$mode" = 100755 ] || { echo "NOT EXECUTABLE in git: $f (mode $mode)"; bad=1; }
-          done < <(git ls-files 'stacks/*/template/.claude/hooks/*.sh' | grep -v '_guard.sh\|_common.sh')
-          exit "$bad"
+          # The previous version of this step asserted mode 100755 in git's
+          # index. It failed - correctly - because pushes go through the GitHub
+          # API, which writes 100644. But the mode is no longer the property
+          # that matters: settings.json invokes the hooks as `bash <script>`
+          # precisely so a lost exec bit cannot silently disable a gate. Assert
+          # THAT, because it is what makes the mode irrelevant.
+          for f in stacks/*/template/.claude/settings.json; do
+            python3 - "$f" <<'PY'
+          import json, sys
+          p = sys.argv[1]
+          bad = []
+          cfg = json.load(open(p))
+          for event, groups in cfg.get("hooks", {}).items():
+              for g in groups:
+                  for h in g.get("hooks", []):
+                      cmd = h.get("command", "")
+                      if ".claude/hooks/" in cmd and not cmd.startswith("bash "):
+                          bad.append(f"{event}: {cmd}")
+          if bad:
+              print(f"{p}: hook command(s) not invoked via bash - a lost exec bit "
+                    f"would exit 127, which Claude Code treats as NON-blocking:")
+              for b in bad:
+                  print(f"  {b}")
+              sys.exit(1)
+          print(f"{p}: all hook commands invoked via bash")
+          PY
+          done
 
       - name: the projections build and carry their declared assets
         run: |
@@ -108,12 +129,29 @@ jobs:
           [ "$rc" = 2 ] || { echo "gate returned $rc, expected 2 (BLOCK)"; exit 1; }
           rm -f src/py_app/ci_broken.py .claude/.gate-state
 
-      - name: the gate fails closed with no project marker and no jq
+      - name: the gate recovers a missing CLAUDE_PROJECT_DIR, and blocks with no project
         run: |
           set -euo pipefail
+          # The first version of this step asserted "unset => must not exit 0",
+          # which is wrong: recovering the project root is the whole point of
+          # the fix, and a clean project then legitimately passes. The local
+          # test only "passed" because a broken file happened to be present.
+          # Two separate properties, tested separately:
           cd /
+          # 1. unset, but the project IS findable from the hook's own path:
+          #    the gate must still find it and still catch a broken file.
+          printf 'x: int = "no"\n' > "$RUNNER_TEMP/py-app/src/py_app/ci_env.py"
+          rm -f "$RUNNER_TEMP/py-app/.claude/.gate-state"
           rc=0; env -u CLAUDE_PROJECT_DIR bash "$RUNNER_TEMP/py-app/.claude/hooks/gate.sh" </dev/null >/dev/null 2>&1 || rc=$?
-          [ "$rc" = 0 ] && { echo "gate passed silently with CLAUDE_PROJECT_DIR unset"; exit 1; }
+          [ "$rc" = 2 ] || { echo "gate returned $rc with CLAUDE_PROJECT_DIR unset; expected 2 (it should have derived the root and caught the file)"; exit 1; }
+          rm -f "$RUNNER_TEMP/py-app/src/py_app/ci_env.py" "$RUNNER_TEMP/py-app/.claude/.gate-state"
+          # 2. hooks copied somewhere with no project at all: must BLOCK,
+          #    never pass silently.
+          orphan=$(mktemp -d)/proj
+          mkdir -p "$orphan/.claude/hooks"
+          cp "$RUNNER_TEMP/py-app/.claude/hooks/"*.sh "$orphan/.claude/hooks/"
+          rc=0; env -u CLAUDE_PROJECT_DIR bash "$orphan/.claude/hooks/gate.sh" </dev/null >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 2 ] || { echo "gate returned $rc with no pyproject.toml; expected 2 (BLOCK)"; exit 1; }
           d=$(mktemp -d)
           for b in /usr/bin/* /bin/*; do n=$(basename "$b"); [ "$n" = jq ] && continue; ln -sf "$b" "$d/$n" 2>/dev/null || true; done
           rc=0
