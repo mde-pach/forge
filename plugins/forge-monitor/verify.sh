@@ -166,5 +166,50 @@ else
   ok "no collector, no merge step, no daemon"
 fi
 
+echo "10. the hook path runs on Linux, macOS and Windows"
+gnu=$(grep -nE '(^|[^[:alnum:]_])(timeout|readlink -f|mapfile|realpath) ' \
+        "$MON_DIR/hooks/emit.sh" "$MON_DIR/hooks/emit.py" 2>/dev/null || true)
+[ -z "$gnu" ] && ok "no GNU-only commands in the hook path (macOS ships none of them)" \
+              || no "GNU-only commands would fail on macOS: $gnu"
+if sh -n "$MON_DIR/hooks/emit.sh" 2>/dev/null; then
+  ok "the launcher is POSIX sh (macOS bash is 3.2, Windows may have neither)"
+else
+  no "the launcher is not valid POSIX sh"
+fi
+bashism=$(grep -nE '\[\[|BASH_SOURCE|\$\{[A-Za-z_]+\/\/' "$MON_DIR/hooks/emit.sh" || true)
+[ -z "$bashism" ] && ok "the launcher contains no bashisms" || no "bashisms in the launcher: $bashism"
+# Parsed, not grepped: the previous version matched the comment explaining why
+# os.uname() is avoided, which is the same mistake as deciding on tool output
+# instead of exit codes.
+if python3 - "$MON_DIR" <<'PYAST'
+import ast, pathlib, sys
+bad = []
+for f in sorted(pathlib.Path(sys.argv[1]).glob("*.py")):
+    for node in ast.walk(ast.parse(f.read_text())):
+        if isinstance(node, ast.Attribute) and node.attr == "uname":
+            bad.append(f"{f.name}:{node.lineno}")
+if bad:
+    print(" ".join(bad)); sys.exit(1)
+PYAST
+then
+  ok "no os.uname() call; the hostname comes from platform.node()"
+else
+  no "os.uname() is POSIX-only and would raise on Windows"
+fi
+if python3 -c "
+import sys; sys.path.insert(0, '$MON_DIR'); import paths, os
+assert paths.state_dir(), 'no state dir'
+assert paths.hostname(), 'no hostname'
+" 2>/dev/null; then
+  ok "the state directory resolves on this platform"
+else
+  no "paths.state_dir() failed"
+fi
+launch=$(printf '{"session_id":"launch-1","cwd":"/tmp/x"}' | sh "$MON_DIR/hooks/emit.sh" Stop 2>&1; echo "rc=$?")
+case "$launch" in
+  "rc=0") ok "the launcher runs the hook and stays silent" ;;
+  *) no "launcher output was: $launch" ;;
+esac
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -18,6 +18,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paths  # noqa: E402
+
 # Two thresholds, and the distinction matters.
 #
 # STALE: we have not heard from this session in a while. That is a statement
@@ -45,12 +48,6 @@ def parse(iso: str | None) -> datetime | None:
         return None
 
 
-def state_dir() -> Path:
-    return Path(
-        os.environ.get("FORGE_MONITOR_STATE")
-        or Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "forge-monitor"
-    )
-
 
 def stale_minutes(state: Path) -> int:
     try:
@@ -68,11 +65,12 @@ def forget_hours(state: Path) -> int:
         return DEFAULT_FORGET_HOURS
 
 
-def main() -> int:
-    state = state_dir()
+def run(exclude: str | None = None) -> int:
+    """Never raises. Returns the number of records touched."""
+    state = paths.state_dir()
     limit = stale_minutes(state)
     forget = forget_hours(state)
-    me = sys.argv[1] if len(sys.argv) > 1 else None
+    me = exclude
     swept = []
 
     for d in (state / "sessions",):
@@ -119,6 +117,11 @@ def main() -> int:
         tmp = f.with_suffix(".tmp")
         tmp.write_text(json.dumps(rec, indent=2))
         tmp.replace(f)
+    return len(swept)
+
+
+def main() -> int:
+    run(sys.argv[1] if len(sys.argv) > 1 else None)
     return 0
 
 

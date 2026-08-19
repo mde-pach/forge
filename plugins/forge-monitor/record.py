@@ -21,6 +21,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paths  # noqa: E402
+
 # Events that change what a human would want to know, so they justify a push.
 # Everything else is recorded and rides along with the next one.
 ALWAYS_PUBLISH = {"SessionStart", "SessionEnd", "Notification", "StopFailure", "TeammateIdle"}
@@ -40,17 +43,11 @@ def now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def state_dir() -> Path:
-    return Path(
-        os.environ.get("FORGE_MONITOR_STATE")
-        or Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "forge-monitor"
-    )
-
 
 def min_publish_interval() -> int:
     """Seconds between pushes for non-urgent events. Attention never waits."""
     try:
-        cfg = json.loads((state_dir() / "config.json").read_text())
+        cfg = json.loads((paths.state_dir() / "config.json").read_text())
         return int(cfg.get("min_publish_seconds", 120))
     except (OSError, ValueError, TypeError):
         return 120
@@ -78,7 +75,7 @@ def fold(rec: dict, event: str, p: dict) -> bool:
             rec[k] = p[k]
     if p.get("cwd"):
         rec["project"] = Path(p["cwd"]).name
-    rec.setdefault("host", os.uname().nodename)
+    rec.setdefault("host", paths.hostname())
     rec.setdefault("first_seen", rec["last_seen"])
 
     ntype = p.get("notification_type")
@@ -114,21 +111,13 @@ def fold(rec: dict, event: str, p: dict) -> bool:
     return before != (rec.get("state"), rec.get("attention_reason"))
 
 
-def main() -> int:
-    event = sys.argv[1] if len(sys.argv) > 1 else "unknown"
-    try:
-        payload = json.load(sys.stdin)
-    except (ValueError, OSError):
-        payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
-
+def handle(event: str, payload: dict) -> str:
+    """Returns "publish" or "hold". Never raises."""
     sid = payload.get("session_id")
     if not sid:
-        print("hold")
-        return 0
+        return "hold"
 
-    d = state_dir() / "sessions"
+    d = paths.state_dir() / "sessions"
     d.mkdir(parents=True, exist_ok=True)
     f = d / f"{sid}.json"
     try:
@@ -151,7 +140,17 @@ def main() -> int:
         rec["publish_attempted_at"] = now()
         tmp.write_text(json.dumps(rec, indent=2))
         tmp.replace(f)
-    print("publish" if go else "hold")
+    return "publish" if go else "hold"
+
+
+def main() -> int:
+    """Runnable alone, for debugging:  cat payload.json | python3 record.py Stop"""
+    event = sys.argv[1] if len(sys.argv) > 1 else "unknown"
+    try:
+        payload = json.load(sys.stdin)
+    except (ValueError, OSError):
+        payload = {}
+    print(handle(event, payload if isinstance(payload, dict) else {}))
     return 0
 
 

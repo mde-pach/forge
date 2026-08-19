@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "SessionStart"
@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "SessionEnd"
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "Notification"
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "Stop"
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "StopFailure"
@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "SubagentStart"
@@ -102,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "SubagentStop"
@@ -118,7 +118,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "TeammateIdle"
@@ -134,7 +134,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "TaskCreated"
@@ -150,7 +150,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "TaskCompleted"
@@ -166,7 +166,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
+            "command": "sh",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh",
               "PreCompact"

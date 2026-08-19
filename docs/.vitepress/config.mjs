@@ -44,6 +44,7 @@ export default defineConfig({
         text: 'How-to',
         items: [
           { text: 'Start a project', link: '/how-to/start-a-project' },
+          { text: 'Set up the session monitor', link: '/how-to/monitor' },
           { text: 'Connect GitHub', link: '/how-to/connect-github' },
           { text: 'Build & run these docs', link: '/how-to/docs' },
         ],

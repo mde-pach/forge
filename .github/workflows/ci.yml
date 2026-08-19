@@ -105,12 +105,30 @@ jobs:
       - name: the monitor cannot be seen by a session
         run: |
           set -euo pipefail
-          # 31 executable checks of the design claims: the emitter is silent on
+          # 37 executable checks of the design claims: the emitter is silent on
           # every event, can never block a turn, the unit is the session and not
           # the machine, publishing is coalesced but attention never waits, a
           # silent session is flagged rather than hidden, and no daemon is
-          # required for the state to be true.
+          # required for the state to be true, and the hook path uses nothing
+          # that macOS or Windows lacks.
           bash plugins/forge-monitor/verify.sh
+
+      - name: the setup document matches the code
+        run: |
+          set -euo pipefail
+          # A setup doc that drifts is worse than none: it sends people down a
+          # path that no longer exists. Check the things it tells you to type.
+          doc=docs/how-to/monitor.md
+          for f in plugins/forge-monitor/doctor.py plugins/forge-monitor/serve.py \
+                   plugins/forge-monitor/paths.py plugins/forge-monitor/tailscale/expose.sh; do
+            grep -q "$(basename "$f")" "$doc" || { echo "$doc never mentions $f"; exit 1; }
+            test -f "$f" || { echo "$doc points at a missing file: $f"; exit 1; }
+          done
+          for key in min_publish_seconds stale_minutes forget_hours; do
+            grep -q "$key" "$doc" || { echo "$doc does not document $key"; exit 1; }
+            grep -rq "$key" plugins/forge-monitor/*.py || { echo "$key is documented but unused"; exit 1; }
+          done
+          python3 plugins/forge-monitor/doctor.py >/dev/null
 
       - name: the monitor is not a capability
         run: |

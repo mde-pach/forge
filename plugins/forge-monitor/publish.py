@@ -26,18 +26,15 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paths  # noqa: E402
+
 API = "https://api.github.com"
 
 
 def now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-
-def state_dir() -> Path:
-    return Path(
-        os.environ.get("FORGE_MONITOR_STATE")
-        or Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "forge-monitor"
-    )
 
 
 def config(state: Path) -> dict:
@@ -170,9 +167,39 @@ def pending(state: Path) -> list[str]:
     return out
 
 
+def _ready() -> tuple[Path, dict, str] | None:
+    state = paths.state_dir()
+    cfg = config(state)
+    if not (cfg.get("store") or {}).get("repo"):
+        return None
+    tok = token(cfg)
+    return (state, cfg, tok) if tok else None
+
+
+def one(sid: str) -> bool:
+    """Publish a single session record. Never raises."""
+    try:
+        r = _ready()
+        return publish_one(*r, sid) if r else False
+    except BaseException:
+        return False
+
+
+def flush(limit: int = 25) -> int:
+    """Publish everything the store is behind on. Never raises."""
+    try:
+        r = _ready()
+        if not r:
+            return 0
+        state, cfg, tok = r
+        return sum(1 for sid in pending(state)[:limit] if publish_one(state, cfg, tok, sid))
+    except BaseException:
+        return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
-    state = state_dir()
+    state = paths.state_dir()
     cfg = config(state)
     if not (cfg.get("store") or {}).get("repo"):
         return 0

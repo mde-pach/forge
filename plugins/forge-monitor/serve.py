@@ -22,12 +22,16 @@ import base64
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paths  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 
@@ -199,9 +203,7 @@ class Handler(SimpleHTTPRequestHandler):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=int(os.environ.get("FORGE_MONITOR_PORT", 7373)))
-    ap.add_argument("--state", default=os.environ.get("FORGE_MONITOR_STATE") or
-                    str(Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) /
-                        "forge-monitor"))
+    ap.add_argument("--state", default=str(paths.state_dir()))
     args = ap.parse_args()
     state = Path(args.state)
     state.mkdir(parents=True, exist_ok=True)
