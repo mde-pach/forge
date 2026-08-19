@@ -21,18 +21,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
-          node-version-file: .nvmrc
-          cache: npm
+          bun-version-file: .bun-version
 
-      # `ci`, not `install`: the lockfile is the source of truth and a drifting
-      # one fails here. --ignore-scripts blocks dependency install hooks, the
-      # usual malware execution path (the default from npm 12 onward). If a
-      # dependency genuinely needs its build step, name it:
-      #   npm ci --ignore-scripts && npm rebuild sharp
+      # --frozen-lockfile: the lockfile is the source of truth, and one that has
+      # drifted fails here rather than being silently re-resolved.
       - name: Install from the lockfile, exactly
-        run: npm ci --ignore-scripts
+        run: bun install --frozen-lockfile
 
       # CI runs THE SAME gate the Stop hook runs - biome ci, tsc --noEmit and
       # next build. One definition of green, so local and CI cannot drift.
@@ -44,7 +40,7 @@ jobs:
         run: bash .claude/hooks/gate.sh < /dev/null
 
       - name: Audit (high and above)
-        run: npm audit --audit-level=high
+        run: bun audit --audit-level=high
 
   image:
     runs-on: ubuntu-latest

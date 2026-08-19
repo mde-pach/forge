@@ -15,7 +15,7 @@ cd "$FORGE_PROJECT_DIR" || exit 2
 
 BIOME="./node_modules/.bin/biome"
 if [ ! -x "$BIOME" ]; then
-  printf 'BLOCKED: %s not found - run `npm ci` (or `npm install`). The gate is not running without it.\n' "$BIOME" >&2
+  printf 'BLOCKED: %s not found - run `bun install`. The gate is not running without it.\n' "$BIOME" >&2
   exit 2
 fi
 

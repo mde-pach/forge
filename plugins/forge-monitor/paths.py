@@ -23,7 +23,9 @@ def state_dir() -> Path:
         return Path(base) / "forge-monitor"
     if platform.system() == "Darwin":
         return Path.home() / "Library" / "Application Support" / "forge-monitor"
-    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "forge-monitor"
+    return (
+        Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "forge-monitor"
+    )
 
 
 def hostname() -> str:

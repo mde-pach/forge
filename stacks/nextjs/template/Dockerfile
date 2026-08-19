@@ -5,15 +5,15 @@ ARG NODE_VERSION=22-slim
 
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+COPY package.json bun.lock* ./
+RUN --mount=type=cache,target=/root/.bun bun install --frozen-lockfile
 
 FROM node:${NODE_VERSION} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN bun run build
 
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app

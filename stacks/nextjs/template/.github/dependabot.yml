@@ -12,6 +12,8 @@ updates:
     commit-message:
       prefix: "ci(actions)"
 
+  # bun is not a Dependabot ecosystem; the npm ecosystem still reads
+  # package.json and proposes the same version bumps.
   - package-ecosystem: npm
     directory: /
     schedule:

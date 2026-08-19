@@ -20,7 +20,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import paths  # noqa: E402
+import paths
 
 # The keys the record folder reads out of a hook payload. If Claude Code names
 # them differently, records come out empty and nothing reports an error - so
@@ -32,8 +32,13 @@ EXPECTED = {
     "Notification": ["notification_type"],
     "Stop": ["last_assistant_message"],
 }
-KNOWN_NOTIFICATIONS = ["permission_prompt", "idle_prompt", "agent_needs_input",
-                       "agent_completed", "elicitation_dialog"]
+KNOWN_NOTIFICATIONS = [
+    "permission_prompt",
+    "idle_prompt",
+    "agent_needs_input",
+    "agent_completed",
+    "elicitation_dialog",
+]
 
 
 def h(title: str) -> None:
@@ -87,7 +92,7 @@ def main() -> int:
         print("  Check with:  claude --debug   (look for forge-monitor)")
     payloads: dict[str, list[dict]] = {}
     for f in logs:
-        ev = f.stem[len("events-"):]
+        ev = f.stem[len("events-") :]
         rows = []
         for line in f.read_text(errors="replace").splitlines():
             try:
@@ -108,8 +113,18 @@ def main() -> int:
             seen |= set(r.keys())
         want = EXPECTED["*"] + EXPECTED.get(ev, [])
         missing = [k for k in want if k not in seen]
-        extra = sorted(seen - set(want) - {"hook_event_name", "transcript_path", "permission_mode",
-                                           "prompt_id", "cwd", "session_id"})
+        extra = sorted(
+            seen
+            - set(want)
+            - {
+                "hook_event_name",
+                "transcript_path",
+                "permission_mode",
+                "prompt_id",
+                "cwd",
+                "session_id",
+            }
+        )
         status = "ok" if not missing else "MISSING " + ", ".join(missing)
         print(f"  {ev:<16} {status}")
         if extra:
@@ -131,9 +146,11 @@ def main() -> int:
         except (OSError, ValueError):
             continue
         pend = "" if (r.get("published_at") or "") >= (r.get("last_seen") or "") else "  PENDING"
-        print(f"  {f.stem[:8]}  {r.get('state', '?'):<8} "
-              f"{r.get('attention_reason') or '-':<20} {r.get('project') or '?':<16}"
-              f"{' STALE' if r.get('stale') else ''}{pend}")
+        print(
+            f"  {f.stem[:8]}  {r.get('state', '?'):<8} "
+            f"{r.get('attention_reason') or '-':<20} {r.get('project') or '?':<16}"
+            f"{' STALE' if r.get('stale') else ''}{pend}"
+        )
 
     h("STORE")
     repo = (cfg.get("store") or {}).get("repo")
@@ -142,30 +159,39 @@ def main() -> int:
     else:
         try:
             import publish
+
             tok = publish.token(cfg)
             if not tok:
                 print("  NO CREDENTIAL. Run: gh auth login")
             else:
                 st, body, _ = publish.call(
-                    "GET", f"https://api.github.com/repos/{repo}/contents/sessions", tok)
-                meaning = {200: "reachable", 404: "repo or sessions/ not there yet",
-                           401: "credential rejected", 403: "forbidden or rate limited",
-                           0: "no network"}.get(st, "unexpected")
+                    "GET", f"https://api.github.com/repos/{repo}/contents/sessions", tok
+                )
+                meaning = {
+                    200: "reachable",
+                    404: "repo or sessions/ not there yet",
+                    401: "credential rejected",
+                    403: "forbidden or rate limited",
+                    0: "no network",
+                }.get(st, "unexpected")
                 n = len(body) if isinstance(body, list) else 0
-                print(f"  GET sessions/  HTTP {st}  ({meaning})"
-                      + (f", {n} file(s)" if st == 200 else ""))
+                print(
+                    f"  GET sessions/  HTTP {st}  ({meaning})"
+                    + (f", {n} file(s)" if st == 200 else "")
+                )
         except Exception as e:  # noqa: BLE001 - a diagnostic must never crash
             print(f"  check failed: {e}")
 
     h("WHAT THE DASHBOARD WOULD SHOW")
     try:
         import importlib.util
+
         spec = importlib.util.spec_from_file_location("srv", HERE / "serve.py")
         m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(m)
         hh = m.Handler.__new__(m.Handler)
         hh.state = state
-        snap = hh._snapshot()
+        snap = hh._snapshot()  # noqa: SLF001 - the diagnostic reports what the server would
         print(f"  source   {snap['source']}")
         print(f"  waiting  {snap['counts']['waiting']}")
         print(f"  running  {snap['counts']['running']}")

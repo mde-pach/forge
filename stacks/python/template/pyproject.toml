@@ -6,6 +6,15 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
 
+# THE ENTRY POINT REGISTRY.
+#
+# uv exposes exactly what is declared here. A script that exists on disk but is
+# absent from this table cannot be run through the supported path, so a second
+# way of doing the same job has nowhere to plug in. Everything this project can
+# do is `uv run <name>`; nothing is invoked by file path.
+[project.scripts]
+__MODULE__ = "__MODULE__.__main__:main"
+
 [build-system]
 requires = ["uv_build>=0.9,<0.13"]
 build-backend = "uv_build"

@@ -13,13 +13,12 @@ Run from the SessionStart hook, in the background.
 from __future__ import annotations
 
 import json
-import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import paths  # noqa: E402
+import paths
 
 # Two thresholds, and the distinction matters.
 #
@@ -36,31 +35,36 @@ DEFAULT_FORGET_HOURS = 72
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def parse(iso: str | None) -> datetime | None:
     if not iso:
         return None
     try:
-        return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError:
         return None
 
 
-
 def stale_minutes(state: Path) -> int:
     try:
-        return int(json.loads((state / "config.json").read_text()).get("stale_minutes",
-                                                                      DEFAULT_STALE_MINUTES))
+        return int(
+            json.loads((state / "config.json").read_text()).get(
+                "stale_minutes", DEFAULT_STALE_MINUTES
+            )
+        )
     except (OSError, ValueError, TypeError):
         return DEFAULT_STALE_MINUTES
 
 
 def forget_hours(state: Path) -> int:
     try:
-        return int(json.loads((state / "config.json").read_text()).get("forget_hours",
-                                                                      DEFAULT_FORGET_HOURS))
+        return int(
+            json.loads((state / "config.json").read_text()).get(
+                "forget_hours", DEFAULT_FORGET_HOURS
+            )
+        )
     except (OSError, ValueError, TypeError):
         return DEFAULT_FORGET_HOURS
 

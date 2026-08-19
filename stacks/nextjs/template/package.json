@@ -6,10 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "check": "biome check --write .",
-    "ci": "biome ci .",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome ci ."
+    "check": "biome ci --colors=off . && tsc --noEmit && next build",
+    "fix": "biome check --write ."
   },
   "dependencies": {
     "next": "^16.3.1",
@@ -22,5 +20,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "typescript": "^5.9.0"
-  }
+  },
+  "packageManager": "bun@1.2.0"
 }

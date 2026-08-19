@@ -23,18 +23,17 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import paths  # noqa: E402
+import paths
 
 API = "https://api.github.com"
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def config(state: Path) -> dict:
@@ -50,8 +49,9 @@ def token(cfg: dict) -> str | None:
         if os.environ.get(var):
             return os.environ[var]
     try:
-        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True,
-                           timeout=10, check=False)
+        r = subprocess.run(
+            ["gh", "auth", "token"], capture_output=True, text=True, timeout=10, check=False
+        )
         if r.returncode == 0 and r.stdout.strip():
             return r.stdout.strip()
     except (subprocess.SubprocessError, OSError):
@@ -59,14 +59,15 @@ def token(cfg: dict) -> str | None:
     tf = (cfg.get("store") or {}).get("token_file")
     if tf:
         try:
-            return Path(os.path.expanduser(tf)).read_text().strip() or None
+            return Path(tf).expanduser().read_text().strip() or None
         except OSError:
             pass
     return None
 
 
-def call(method: str, url: str, tok: str, body: dict | None = None,
-         timeout: int = 20) -> tuple[int, dict, dict]:
+def call(
+    method: str, url: str, tok: str, body: dict | None = None, timeout: int = 20
+) -> tuple[int, dict, dict]:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {tok}")
@@ -109,14 +110,13 @@ def publish_one(state: Path, cfg: dict, tok: str, sid: str) -> bool:
     path = f"sessions/{sid}.json"
     url = f"{API}/repos/{repo}/contents/{path}"
     payload = dict(rec)
-    payload.pop("store_sha", None)          # bookkeeping, not state
+    payload.pop("store_sha", None)  # bookkeeping, not state
     payload.pop("publish_attempted_at", None)
 
     body = {
         "message": f"{rec.get('project') or 'session'} {sid[:8]}: {rec.get('state', '?')}"
-                   + (f" ({rec['attention_reason']})" if rec.get("attention_reason") else ""),
-        "content": base64.b64encode(
-            (json.dumps(payload, indent=2) + "\n").encode()).decode(),
+        + (f" ({rec['attention_reason']})" if rec.get("attention_reason") else ""),
+        "content": base64.b64encode((json.dumps(payload, indent=2) + "\n").encode()).decode(),
         "branch": branch,
     }
     if rec.get("store_sha"):
@@ -133,12 +133,12 @@ def publish_one(state: Path, cfg: dict, tok: str, sid: str) -> bool:
             body["sha"] = cur["sha"]
             status, resp, _ = call("PUT", url, tok, body)
         elif st2 == 404:
-            body.pop("sha", None)           # it is gone; create it fresh
+            body.pop("sha", None)  # it is gone; create it fresh
             status, resp, _ = call("PUT", url, tok, body)
 
     if status in (200, 201):
         rec["published_at"] = now()
-        sha = ((resp.get("content") or {}).get("sha"))
+        sha = (resp.get("content") or {}).get("sha")
         if sha:
             rec["store_sha"] = sha
         write_record(f, rec)
@@ -208,7 +208,7 @@ def main() -> int:
         return 0
 
     if args and args[0] == "--flush":
-        for sid in pending(state)[:25]:      # bounded: a hook is not a batch job
+        for sid in pending(state)[:25]:  # bounded: a hook is not a batch job
             publish_one(state, cfg, tok, sid)
         return 0
 
@@ -222,5 +222,5 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except SystemExit:
         raise
-    except BaseException:                    # a monitor never takes the session with it
+    except BaseException:  # a monitor never takes the session with it
         raise SystemExit(0)

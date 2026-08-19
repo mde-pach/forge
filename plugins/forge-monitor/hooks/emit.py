@@ -75,12 +75,14 @@ def main() -> int:
     payload = read_payload()
 
     import paths
+
     state = paths.state_dir()
     log_raw(state, event, payload)
 
     sid = payload.get("session_id")
 
     import record
+
     decision = record.handle(event, payload)
 
     # A session starting is the moment to repair what nobody was watching: a
@@ -88,9 +90,11 @@ def main() -> int:
     # would claim to be running forever.
     if event == "SessionStart":
         import sweep
+
         sweep.run(exclude=sid)
 
     import publish
+
     if decision == "publish" and sid:
         publish.one(sid)
     if decision == "publish" or event == "SessionStart":
@@ -103,6 +107,6 @@ if __name__ == "__main__":
     try:
         main()
     except BaseException:
-        pass          # a monitor never takes the session with it
+        pass  # a monitor never takes the session with it
     sys.stdout.flush()
     os._exit(0)

@@ -21,7 +21,9 @@ __DESCRIPTION__
 
 ## Commands you cannot guess
 
-<!-- Only unguessable ones. `npm run dev` is guessable; delete it. -->
+<!-- Only unguessable ones. Everything runnable is declared as an entry point,
+     so `bun run` with no arguments lists them - that is the single entry
+     point, and nothing here is invoked by file path. -->
 
 ## Deviations from defaults
 

@@ -11,7 +11,7 @@ if [ ! -f package.json ]; then
   exit 2
 fi
 if [ ! -d node_modules ]; then
-  printf 'BLOCKED: node_modules missing - run `npm ci`. The gate is not running without it.\n' >&2
+  printf 'BLOCKED: node_modules missing - run `bun install`. The gate is not running without it.\n' >&2
   exit 2
 fi
 
@@ -27,8 +27,8 @@ ${out}"
 
 run "biome ci"      ./node_modules/.bin/biome ci --colors=off .
 run "tsc --noEmit"  ./node_modules/.bin/tsc --noEmit
-run "next build"    npm run build --silent
-grep -q '"test"' package.json && run "tests" npm test --silent
+run "next build"    bun run build
+grep -q '"test"' package.json && run "tests" bun test
 
 if [ -n "$fail" ]; then
   digest=$(guard_digest "$fail")

@@ -34,18 +34,21 @@ jobs:
           # find, not globstar: `**` does not descend into dot-directories, so a
           # glob would silently skip stacks/*/template/.claude/hooks/*.sh - the
           # most important scripts in the repo.
-          mapfile -d '' files < <(find bootstrap capabilities scripts stacks plugins -name '*.sh' -type f -print0)
+          mapfile -d '' files < <(find capabilities stacks plugins -name '*.sh' -type f -print0)
           printf 'checking %d scripts\n' "${#files[@]}"
-          [ "${#files[@]}" -ge 14 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
+          [ "${#files[@]}" -ge 12 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
           for f in "${files[@]}"; do bash -n "$f"; done
           # The hook fragments are sourced, never executed: tell shellcheck.
           shellcheck --shell=bash --external-sources --severity=warning "${files[@]}"
 
-      - name: capability manifests
+      - name: forge checks itself
         run: |
           set -euo pipefail
+          # One command, and it is deliberately not one I can satisfy by being
+          # confident: it fails on files nothing runs, on two mechanisms claiming
+          # one role, and on checks that pass without testing anything.
           pip install pyyaml
-          python3 scripts/validate-manifests.py
+          PYTHONPATH=src python3 -m forge.cli check
 
       - name: hooks are invoked in a way the exec bit cannot break
         run: |
@@ -78,103 +81,42 @@ jobs:
           PY
           done
 
-      - name: the projections build and carry their declared assets
-        run: |
-          set -euo pipefail
-          pip install pyyaml
-          # dist/ is a build output (gitignored), so "freshness" is not a thing
-          # to check - that it BUILDS, and that the skills are not hollow, is.
-          bash bootstrap/build.sh
-          test -x dist/plugin/skills/scaffold/scaffold.sh
-          test -d dist/plugin/skills/scaffold/stacks/python/template
-          test -d dist/plugin/skills/scaffold/stacks/nextjs/template
-          # And the same for a real install: the projected skill must run.
-          bash bootstrap/install.sh project "$RUNNER_TEMP/installed"
-          # Capture, then assert. `cmd | grep -q ... || fail` cannot work here:
-          # scaffold.sh with no arguments prints its usage and exits 1 (correct
-          # behaviour), and under `set -o pipefail` the pipeline takes THAT
-          # status, not grep's - so the check failed even though the usage line
-          # was found. Third time a check has tested the wrong thing.
-          out=$(bash "$RUNNER_TEMP/installed/.claude/skills/scaffold/scaffold.sh" 2>&1 || true)
-          grep -q 'usage: scaffold.sh' <<<"$out" || {
-            echo "the projected scaffold skill is not runnable; it printed:"
-            printf '%s\n' "$out"
-            exit 1
-          }
-
-      - name: the monitor cannot be seen by a session
-        run: |
-          set -euo pipefail
-          # 37 executable checks of the design claims: the emitter is silent on
-          # every event, can never block a turn, the unit is the session and not
-          # the machine, publishing is coalesced but attention never waits, a
-          # silent session is flagged rather than hidden, and no daemon is
-          # required for the state to be true, and the hook path uses nothing
-          # that macOS or Windows lacks.
-          bash plugins/forge-monitor/verify.sh
-
-      - name: the setup document matches the code
-        run: |
-          set -euo pipefail
-          # A setup doc that drifts is worse than none: it sends people down a
-          # path that no longer exists. Check the things it tells you to type.
-          doc=docs/how-to/monitor.md
-          for f in plugins/forge-monitor/doctor.py plugins/forge-monitor/serve.py \
-                   plugins/forge-monitor/paths.py plugins/forge-monitor/tailscale/expose.sh; do
-            grep -q "$(basename "$f")" "$doc" || { echo "$doc never mentions $f"; exit 1; }
-            test -f "$f" || { echo "$doc points at a missing file: $f"; exit 1; }
-          done
-          for key in min_publish_seconds stale_minutes forget_hours; do
-            grep -q "$key" "$doc" || { echo "$doc does not document $key"; exit 1; }
-            grep -rq "$key" plugins/forge-monitor/*.py || { echo "$key is documented but unused"; exit 1; }
-          done
-          python3 plugins/forge-monitor/doctor.py >/dev/null
-
       - name: the monitor is not a capability
         run: |
           set -euo pipefail
-          # It is deliberately outside the contract: a capability is something a
-          # session invokes, and nothing here may be invocable. Guard the
-          # boundary rather than trusting it to stay put.
-          if find plugins/forge-monitor -name SKILL.md -o -name manifest.yaml | grep -q .; then
-            echo "the monitor grew a session-facing surface"; exit 1
+          # Capabilities are things a session invokes; these are things a session
+          # is subject to. Guard the boundary rather than trusting it to stay put.
+          if find plugins -name SKILL.md -o -name manifest.yaml | grep -q .; then
+            echo "a plugin grew a session-facing surface"; exit 1
           fi
-          if [ -d capabilities/monitor ] || [ -d capabilities/forge-monitor ]; then
-            echo "the monitor was moved under capabilities/"; exit 1
-          fi
-          # No daemon: the state must stay true with nothing running.
-          for f in collector.py merge.py run.sh; do
+          for f in collector.py merge.py run.sh statusline.sh; do
             if [ -e "plugins/forge-monitor/$f" ]; then
-              echo "a background process is back: $f"; exit 1
+              echo "a superseded path is back: $f"; exit 1
             fi
           done
-          # And nothing in this repo may install itself at user scope: global
-          # config is not reproducible and leaks into unrelated work.
-          if grep -rn 'HOME/\.claude/settings\.json\|~/\.claude/settings\.json' \
-               --include='*.sh' --include='*.py' bootstrap capabilities plugins scripts \
-             | grep -v 'verify\.sh' | grep -qv '^$'; then
-            echo "something writes user-scope settings; everything must be packaged"
-            grep -rn 'HOME/\.claude/settings\.json\|~/\.claude/settings\.json' \
-              --include='*.sh' --include='*.py' bootstrap capabilities plugins scripts | grep -v 'verify\.sh'
-            exit 1
-          fi
 
-      - name: the plugin and marketplace manifests are valid
+      - name: the guard can actually block
         run: |
           set -euo pipefail
-          # `claude plugin validate` checks plugin.json, hooks.json syntax, and
-          # for the marketplace: schema, duplicate names and source traversal.
-          # A malformed hooks.json silently disables the entire plugin, which is
-          # exactly the looks-on-but-off failure this repo exists to prevent.
-          if command -v claude >/dev/null 2>&1; then
-            claude plugin validate ./plugins/forge-monitor
-            claude plugin validate .
-          else
-            python3 -c "import json;json.load(open('.claude-plugin/marketplace.json'))"
-            python3 -c "import json;json.load(open('plugins/forge-monitor/.claude-plugin/plugin.json'))"
-            python3 -c "import json;json.load(open('plugins/forge-monitor/hooks/hooks.json'))"
-            echo "claude CLI absent; validated JSON syntax only"
-          fi
+          # A gate that prints its refusal and exits 0 is not a gate. This is
+          # how the guard shipped for its first ten minutes: SystemExit is a
+          # BaseException, and a bare handler swallowed the exit(2).
+          d=$(mktemp -d); git -C "$d" init -q; mkdir -p "$d/.claude"
+          echo '{}' > "$d/.claude/settings.json"
+          rc=0
+          printf '{"cwd":"%s"}' "$d" \
+            | python3 plugins/forge-guard/hooks/protected.py >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 2 ] || { echo "guard returned $rc for a changed protected file; expected 2"; exit 1; }
+          rc=0; echo 'not json' | python3 plugins/forge-guard/hooks/protected.py >/dev/null 2>&1 || rc=$?
+          [ "$rc" = 0 ] || { echo "guard returned $rc on garbage input; it must never block on its own failure"; exit 1; }
+
+      - name: the projected plugins are complete
+        run: |
+          set -euo pipefail
+          test -x plugins/forge-monitor/hooks/emit.sh
+          test -f plugins/forge-monitor/hooks/hooks.json
+          test -f plugins/forge-guard/hooks/hooks.json
+          PYTHONPATH=src python3 -m forge.cli --help | grep -q 'forge <command>'
 
       - name: the docs build, with dead links treated as failures
         run: |

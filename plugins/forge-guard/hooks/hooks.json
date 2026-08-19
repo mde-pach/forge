@@ -1,0 +1,11 @@
+{
+  "description": "Tells a session what already exists before it builds a second one, and refuses to end a turn that changed the rules without an independent review.",
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "sh", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/run.sh", "inventory.py"], "timeout": 20 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "sh", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/run.sh", "protected.py"], "timeout": 30 }] }
+    ]
+  }
+}

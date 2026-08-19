@@ -41,6 +41,13 @@ identical failures (then re-arms), while CI sets `FORGE_GATE_NO_RELEASE=1`,
 because in CI there is no human to unblock and a release would turn a red build
 green.
 
+## Why the templates are pinned the way they are
+
+`references/verified-stack-facts.md` records what was checked against the real
+tools and when — ruff's default set, Next.js not type-checking under Turbopack,
+the npm package-name squat. Read it before changing a template's tooling; it is
+the difference between a version choice and a guess.
+
 ## Verify before handing over
 
 The script verifies itself and prints the result; a scaffold is only done when

@@ -29,9 +29,10 @@ import urllib.request
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import paths  # noqa: E402
+import paths
 
 HERE = Path(__file__).resolve().parent
 
@@ -47,8 +48,8 @@ class Handler(SimpleHTTPRequestHandler):
     # rate limit when it is correctly authorised, so polling hard is free and
     # the page is genuinely current rather than current-as-of-the-last-pull.
     _etag: str | None = None
-    _cache: dict[str, dict] = {}          # path -> {sha, record}
-    _last_good: list[dict] = []
+    _cache: ClassVar[dict[str, dict]] = {}  # path -> {sha, record}
+    _last_good: ClassVar[list[dict]] = []
     _online: bool | None = None
 
     def _cfg(self) -> dict:
@@ -62,8 +63,9 @@ class Handler(SimpleHTTPRequestHandler):
             if os.environ.get(var):
                 return os.environ[var]
         try:
-            r = subprocess.run(["gh", "auth", "token"], capture_output=True,
-                               text=True, timeout=10, check=False)
+            r = subprocess.run(
+                ["gh", "auth", "token"], capture_output=True, text=True, timeout=10, check=False
+            )
             if r.returncode == 0 and r.stdout.strip():
                 return r.stdout.strip()
         except (subprocess.SubprocessError, OSError):
@@ -71,7 +73,7 @@ class Handler(SimpleHTTPRequestHandler):
         tf = (cfg.get("store") or {}).get("token_file")
         if tf:
             try:
-                return Path(os.path.expanduser(tf)).read_text().strip() or None
+                return Path(tf).expanduser().read_text().strip() or None
             except OSError:
                 pass
         return None
@@ -108,14 +110,14 @@ class Handler(SimpleHTTPRequestHandler):
 
         if status == 304:
             Handler._online = True
-            return Handler._last_good              # nothing changed; free
+            return Handler._last_good  # nothing changed; free
         if status == 404:
             Handler._online = True
             Handler._last_good = []
-            return []                              # store exists, no sessions yet
+            return []  # store exists, no sessions yet
         if status != 200 or not isinstance(listing, list):
             Handler._online = False
-            return Handler._last_good or None      # stale beats blank
+            return Handler._last_good or None  # stale beats blank
 
         Handler._online = True
         Handler._etag = etag
@@ -126,10 +128,11 @@ class Handler(SimpleHTTPRequestHandler):
                 continue
             hit = Handler._cache.get(name)
             if hit and hit["sha"] == sha:
-                fresh[name] = hit                  # unchanged blob, no request
+                fresh[name] = hit  # unchanged blob, no request
                 continue
             st, blob, _ = self._api(
-                f"https://api.github.com/repos/{repo}/contents/sessions/{name}?ref={branch}", tok)
+                f"https://api.github.com/repos/{repo}/contents/sessions/{name}?ref={branch}", tok
+            )
             if st != 200 or not isinstance(blob, dict):
                 if hit:
                     fresh[name] = hit
@@ -158,23 +161,29 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _snapshot(self) -> dict:
         recs, where = self._records()
-        key = lambda r: r.get("attention_since") or r.get("last_seen") or ""  # noqa: E731
+        key = lambda r: r.get("attention_since") or r.get("last_seen") or ""
 
-        waiting = sorted((r for r in recs if r.get("needs_attention") and not r.get("ended")),
-                         key=key)                       # oldest demand first
-        running = sorted((r for r in recs if not r.get("needs_attention") and not r.get("ended")),
-                         key=key, reverse=True)
+        waiting = sorted(
+            (r for r in recs if r.get("needs_attention") and not r.get("ended")), key=key
+        )  # oldest demand first
+        running = sorted(
+            (r for r in recs if not r.get("needs_attention") and not r.get("ended")),
+            key=key,
+            reverse=True,
+        )
         recent = sorted((r for r in recs if r.get("ended")), key=key, reverse=True)[:15]
 
         return {
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "source": where,
             "counts": {"waiting": len(waiting), "running": len(running), "recent": len(recent)},
-            "waiting": waiting, "running": running, "recent": recent,
+            "waiting": waiting,
+            "running": running,
+            "recent": recent,
         }
 
     # ---- http -------------------------------------------------------------
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         path = self.path.split("?")[0]
         if path in ("/snapshot.json", "/snapshot"):
             return self._json(self._snapshot())
@@ -202,7 +211,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=int(os.environ.get("FORGE_MONITOR_PORT", 7373)))
+    ap.add_argument("--port", type=int, default=int(os.environ.get("FORGE_MONITOR_PORT") or 7373))
     ap.add_argument("--state", default=str(paths.state_dir()))
     args = ap.parse_args()
     state = Path(args.state)

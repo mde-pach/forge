@@ -1,30 +1,50 @@
 # forge
 
-A personal operating framework for working with Claude — across Claude Code, the Claude app, and Cowork. Repo-first: this repository is the single source of truth; everything installed elsewhere is generated from it.
+An operating framework for working with Claude — across Claude Code, the Claude
+app and Cowork. It is where the things I do repeatedly live and are maintained:
+project scaffolding, quality gates, research and validation capabilities, and a
+view of what my sessions are doing.
 
-## What it is
+## One way in
 
-- **kernel/** — how Claude operates under forge, always and everywhere. Seven behaviors. Small by design.
-- **contract/** — the capability contract (frozen, versioned). Every capability, present or future, conforms to it.
-- **capabilities/** — capability instances. Created only when a need demonstrates itself, never speculatively.
-- **stacks/** — opinionated technology modules plugged into capabilities that touch code.
-- **bootstrap/** — the self-installing skill. Projects forge into a project, an account, or a session.
-- **dist/** — generated projections (plugin, account skills). Never hand-edited.
-
-## Why it's shaped this way
-
-Microkernel pattern: the kernel is mechanism, capabilities are policy. The contract is the one deliberately up-front investment; everything else is added on demonstrated need. Design rationale: `docs/explanation.md`; evidence base: `kernel/SOURCES.md`; observed frictions: `FRICTIONS.md`.
-
-## Install
-
-```
-bash bootstrap/install.sh project /path/to/project   # wire forge into a project
-bash bootstrap/install.sh user                        # wire forge into ~/.claude
-bash bootstrap/build.sh                               # regenerate dist/ projections
+```bash
+uv run forge            # what forge can do
+uv run forge scaffold python ~/code/my-api "What it does"
+uv run forge serve      # the session view, on localhost
+uv run forge check      # every check forge makes about itself
 ```
 
-Or, in any Claude surface with the forge-setup skill available: ask for forge setup. Canonical remote: https://github.com/mde-pach/forge — docs: https://mde-pach.github.io/forge/ (GitHub access for sessions: `docs/how-to/connect-github.md`).
+There is exactly one entry point, and `uv` exposes only what
+`pyproject.toml` declares. A script that exists on disk but is not declared
+cannot be invoked — which is the mechanism that stops a second way of doing the
+same job from quietly appearing beside the first. Five of them once did.
 
-## Evolving forge
+## What's here
 
-Changes to forge go through the loop capability: learnings are proposed as diffs, reviewed, committed. The contract evolves only by weakening preconditions or strengthening postconditions; deprecate, don't delete. Periodic factorization passes keep the whole thing small.
+- **`src/forge/`** — the registry and the dispatcher. `registry.py` is the list
+  of everything forge provides; two entries claiming the same role is an error
+  at import, not a review comment.
+- **`kernel/`** — how Claude operates under forge. Seven behaviours, small by design.
+- **`contract/`** — the capability contract, frozen and versioned.
+- **`capabilities/`** — created only when a need demonstrates itself.
+- **`stacks/`** — opinionated project templates, with their gates.
+- **`plugins/`** — Claude Code plugins forge maintains. Loaded at launch, never
+  declared by your projects.
+
+Design rationale: `docs/explanation.md`. Evidence: `kernel/SOURCES.md`.
+What went wrong and what was done about it: `FRICTIONS.md`.
+
+## Setup
+
+`docs/how-to/monitor.md` for the session view.
+`docs/how-to/connect-github.md` for GitHub access.
+`docs/how-to/start-a-project.md` for scaffolding.
+
+Docs: https://mde-pach.github.io/forge/ — repo: https://github.com/mde-pach/forge
+
+## Changing forge
+
+Every change goes through the loop capability: learnings become reviewed diffs.
+`uv run forge check` must be clean, and it is deliberately not a check I can
+satisfy by being confident — it fails on files nothing runs, on two mechanisms
+claiming one role, and on checks that pass without testing anything.

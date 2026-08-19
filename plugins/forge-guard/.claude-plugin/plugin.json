@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "forge-guard",
+  "displayName": "forge · guard",
+  "version": "0.1.0",
+  "description": "Injects what already exists before you build a second one, and blocks a turn that changed hooks, settings, manifests or CI until an independent review exists.",
+  "author": { "name": "mde-pach", "url": "https://github.com/mde-pach" },
+  "repository": "https://github.com/mde-pach/forge",
+  "license": "MIT"
+}

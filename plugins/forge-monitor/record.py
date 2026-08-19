@@ -16,13 +16,12 @@ Nothing here ever reaches the session: the hook that calls it discards output.
 from __future__ import annotations
 
 import json
-import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import paths  # noqa: E402
+import paths
 
 # Events that change what a human would want to know, so they justify a push.
 # Everything else is recorded and rides along with the next one.
@@ -40,8 +39,7 @@ FINISHED = {"agent_completed": "finished"}
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def min_publish_interval() -> int:
@@ -57,10 +55,10 @@ def since(iso: str | None) -> float:
     if not iso:
         return 1e9
     try:
-        t = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        t = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError:
         return 1e9
-    return (datetime.now(timezone.utc) - t).total_seconds()
+    return (datetime.now(UTC) - t).total_seconds()
 
 
 def fold(rec: dict, event: str, p: dict) -> bool:
@@ -80,23 +78,36 @@ def fold(rec: dict, event: str, p: dict) -> bool:
 
     ntype = p.get("notification_type")
     if event == "SessionStart":
-        rec.update(state="working", attention_reason=None, ended=False,
-                   start_reason=p.get("session_start_reason"))
+        rec.update(
+            state="working",
+            attention_reason=None,
+            ended=False,
+            start_reason=p.get("session_start_reason"),
+        )
     elif event == "SessionEnd":
-        rec.update(state="ended", attention_reason=None, ended=True,
-                   end_reason=p.get("session_end_reason"))
+        rec.update(
+            state="ended", attention_reason=None, ended=True, end_reason=p.get("session_end_reason")
+        )
     elif event == "Notification" and ntype in ATTENTION:
-        rec.update(state="blocked", attention_reason=ATTENTION[ntype],
-                   attention_since=rec.get("attention_since") or now())
+        rec.update(
+            state="blocked",
+            attention_reason=ATTENTION[ntype],
+            attention_since=rec.get("attention_since") or now(),
+        )
     elif event == "Notification" and ntype in FINISHED:
-        rec.update(state="idle", attention_reason="finished",
-                   attention_since=rec.get("attention_since") or now())
+        rec.update(
+            state="idle",
+            attention_reason="finished",
+            attention_since=rec.get("attention_since") or now(),
+        )
     elif event == "TeammateIdle":
-        rec.update(state="idle", attention_reason="idle",
-                   attention_since=rec.get("attention_since") or now())
+        rec.update(
+            state="idle",
+            attention_reason="idle",
+            attention_since=rec.get("attention_since") or now(),
+        )
     elif event == "StopFailure":
-        rec.update(state="failed", attention_reason="turn failed",
-                   attention_since=now())
+        rec.update(state="failed", attention_reason="turn failed", attention_since=now())
     elif event == "Stop":
         # A turn ended. Not a demand by itself - the gate may have blocked it
         # and the session may carry on. It does clear a previous demand.
