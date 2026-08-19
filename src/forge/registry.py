@@ -70,6 +70,12 @@ REGISTRY: tuple[Entry, ...] = (
         protected=True,
     ),
     Entry(
+        name="parity",
+        role="mirror-parity",
+        summary="Check the remote holds exactly what this checkout holds.",
+        handler="forge.commands.parity:run",
+    ),
+    Entry(
         name="docs",
         role="documentation",
         summary="Regenerate generated documentation, or verify it is current.",
