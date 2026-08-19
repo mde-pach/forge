@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 
-from forge.checks import documented_commands, manifests, orphans
+from forge.checks import documented_commands, handlers, manifests, orphans
 from forge.registry import REGISTRY, ROOT, roles
 
 
@@ -61,6 +61,23 @@ def _proofs() -> list[tuple[str, bool, str]]:
         )
     )
 
+    import forge.registry as reg
+    from forge.registry import Entry
+
+    original = reg.REGISTRY
+    try:
+        reg.REGISTRY = (*original, Entry("ghost", "ghost-role", "x", "forge.commands.nothing:run"))
+        ghost_caught = any("does not import" in e for e in handlers.check())
+    finally:
+        reg.REGISTRY = original
+    out.append(
+        (
+            "a declared command whose handler does not exist is caught",
+            ghost_caught,
+            "the registry promised `forge docs` for an hour before the module existed",
+        )
+    )
+
     doc = ROOT / "stacks/nextjs/template/README.md"
     original = doc.read_text()
     try:
@@ -83,6 +100,14 @@ def run(_args: Sequence[str] = ()) -> int:
 
     print("registry")
     print(f"  ok    {len(REGISTRY)} commands, {len(roles())} distinct roles")
+
+    handler_errs = handlers.check()
+    if handler_errs:
+        failures += len(handler_errs)
+        for e in handler_errs:
+            print(f"  FAIL  {e}")
+    else:
+        print("  ok    every declared command resolves to a callable")
 
     print("capability manifests")
     errs = manifests.check()

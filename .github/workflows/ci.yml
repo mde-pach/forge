@@ -131,6 +131,20 @@ jobs:
           test -f plugins/forge-guard/hooks/hooks.json
           PYTHONPATH=src python3 -m forge.cli --help | grep -q 'forge <command>'
 
+      - name: the remote holds what this checkout holds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Pushes go through the API rather than `git push`, so the remote is
+          # hand-assembled and nothing notices when it drifts. It drifted twice
+          # before this existed. Exit 2 means "could not check" and is not a
+          # failure here; exit 1 means the remote and the tree disagree.
+          rc=0
+          PYTHONPATH=src python3 -m forge.cli parity "$GITHUB_REPOSITORY" "${GITHUB_REF_NAME}" || rc=$?
+          [ "$rc" = 1 ] && { echo "the remote has drifted from this commit"; exit 1; }
+          exit 0
+
       - name: the docs build, with dead links treated as failures
         run: |
           set -euo pipefail
