@@ -78,8 +78,12 @@ fi
 
 host=$(hostname 2>/dev/null || echo unknown)
 mkdir -p "sessions/$host"
-printf '%s' "$payload" | jq -r '.status_md' > STATUS.md
-printf '%s' "$payload" | jq   '.snapshot'   > "sessions/$host/snapshot.json"
+printf '%s' "$payload" | jq '.snapshot' > "sessions/$host/snapshot.json"
+
+# The store is where machines meet, so the merged view is computed HERE, from
+# every host's file, not from the one machine that happens to be pushing.
+python3 "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")/merge.py" . >/dev/null 2>&1 \
+  || printf '%s' "$payload" | jq -r '.status_md' > STATUS.md
 
 git add -A >/dev/null 2>&1
 if git diff --cached --quiet 2>/dev/null && git rev-parse HEAD >/dev/null 2>&1; then

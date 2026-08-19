@@ -95,7 +95,19 @@ In a project's `.claude/settings.json`, committed:
 }
 ```
 
-Then, on the machine that should collect and display:
+Then create the store once — this is not optional, it is the only place the
+machines meet:
+
+```bash
+gh auth login && gh auth setup-git
+gh repo create <you>/forge-state --private
+```
+
+```json
+{ "sink": { "type": "github", "repo": "<you>/forge-state" } }
+```
+
+Then, on each machine that should collect:
 
 ```bash
 bash plugins/forge-monitor/verify.sh            # 23 checks, all executable
@@ -152,6 +164,38 @@ bash tailscale/expose.sh          # the dashboard on 7373
 bash tailscale/expose.sh 3000     # a dev server
 bash tailscale/expose.sh --status
 ```
+
+## Why the store is not optional
+
+An earlier version of this README implied the sink was a nice-to-have because
+the dashboard could read local state directly. That was wrong, and the reason it
+was wrong is structural:
+
+- `claude agents` spans **one machine**, and an event log lives on the disk that
+  wrote it. Two machines have no way to see each other except through a shared
+  store.
+- A **cloud session** runs the plugin — but in an isolated container. Its events
+  never reach your laptop's filesystem. Without something that ships them out,
+  the cloud coverage the plugin appears to buy is not real (see below).
+- With the laptop asleep, a dashboard served *from* the laptop is unreachable.
+  The store still holds the last known state.
+- State on one disk is state that dies with a reinstall. There is no history.
+
+So the flow is store-first: each machine's collector publishes its own
+`sessions/<host>/snapshot.json`, `merge.py` folds every host into one
+`snapshot.json`, and the dashboard reads *that*, falling back to local state
+only when no store is configured yet. Demands are sorted oldest-first, because
+the thing that has been waiting longest is the thing you most need to see.
+
+## The cloud-session hole, stated plainly
+
+Making this a plugin means a cloud session *runs* it. It does not mean the
+events arrive: the container is isolated and discarded. Closing that needs a
+credential inside the cloud environment so the session can push its own state —
+and in a cloud container the agent can read anything the hooks can, so that
+credential is reachable by the agent. It should therefore be scoped to the state
+repo and nothing else, and the blast radius is "a session could corrupt its own
+monitoring data". That is a decision, not a detail, and it is unmade.
 
 ## What it does not do
 

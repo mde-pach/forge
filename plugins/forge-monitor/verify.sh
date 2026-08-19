@@ -138,5 +138,27 @@ else
   no "file sink produced nothing at $TMP/published"
 fi
 
+echo "10. the store, not one machine, is the source of truth"
+store="$TMP/store"
+mkdir -p "$store/sessions/m1" "$store/sessions/m2"
+cat > "$store/sessions/m1/snapshot.json" <<'JSON'
+{"generated_at":"t1","counts":{"waiting":1,"active":0,"recent":0},
+ "waiting":[{"session_id":"m1a","project":"p1","attention_reason":"needs input","attention_since":"2026-01-01T00:00:00Z"}],
+ "active":[],"recent":[]}
+JSON
+cat > "$store/sessions/m2/snapshot.json" <<'JSON'
+{"generated_at":"t2","counts":{"waiting":1,"active":1,"recent":0},
+ "waiting":[{"session_id":"m2a","project":"p2","attention_reason":"permission request","attention_since":"2025-12-31T00:00:00Z"}],
+ "active":[{"session_id":"m2b","project":"p3","state":"working"}],"recent":[]}
+JSON
+python3 "$MON_DIR/merge.py" "$store" >/dev/null 2>&1 || true
+n=$(python3 -c "import json;print(json.load(open('$store/snapshot.json'))['counts']['waiting'])" 2>/dev/null || echo x)
+[ "$n" = 2 ] && ok "two machines merge into one view" || no "expected 2 waiting across machines, got $n"
+first=$(python3 -c "import json;print(json.load(open('$store/snapshot.json'))['waiting'][0]['session_id'])" 2>/dev/null || echo x)
+[ "$first" = "m2a" ] && ok "the longest-waiting demand is listed first" \
+                     || no "expected m2a first (waiting since 2025-12-31), got $first"
+hosts=$(python3 -c "import json;print(len(json.load(open('$store/snapshot.json'))['machines']))" 2>/dev/null || echo x)
+[ "$hosts" = 2 ] && ok "both machines are named in the merged view" || no "expected 2 machines, got $hosts"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -124,7 +124,10 @@ async function tick(){
 
     const n = (d.waiting || []).length;
     document.title = n ? `(${n}) sessions` : "sessions";
-    $("foot").textContent = `${(d.active||[]).length} running · updated ${d.generated_at || "?"}`;
+    const machines = Object.keys(d.machines || {});
+    $("foot").textContent = machines.length
+      ? `${(d.active||[]).length} running · ${machines.length} machine(s): ${machines.join(", ")}`
+      : `${(d.active||[]).length} running · this machine only`;
   }catch(err){
     // Never blank the screen on a transient failure: stale data beats no data,
     // and a phone on a flaky connection produces a lot of transient failures.

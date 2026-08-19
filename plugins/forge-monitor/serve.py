@@ -33,10 +33,25 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"ok": True})
         return super().do_GET()
 
+    def _sources(self):
+        """The store first, this machine second.
+
+        Reading local state directly is what made the dashboard single-machine.
+        When a store clone exists it holds every machine's snapshot merged, so
+        it is the truthful answer; the local file is the fallback for a setup
+        with no sink configured yet.
+        """
+        return [self.state / "repo" / "snapshot.json", self.state / "snapshot.json"]
+
     def _snapshot(self):
-        try:
-            body = (self.state / "snapshot.json").read_bytes()
-        except OSError:
+        body = None
+        for src in self._sources():
+            try:
+                body = src.read_bytes()
+                break
+            except OSError:
+                continue
+        if body is None:
             # The collector has not run yet. An empty but well-formed snapshot
             # renders as "nothing needs you", which is true, rather than as an
             # error the user has to interpret.
