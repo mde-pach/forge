@@ -110,7 +110,7 @@ gh repo create <you>/forge-state --private
 Then, on each machine that should collect:
 
 ```bash
-bash plugins/forge-monitor/verify.sh            # 23 checks, all executable
+bash plugins/forge-monitor/verify.sh            # 26 checks, all executable
 bash plugins/forge-monitor/run.sh               # collector + dashboard
 bash plugins/forge-monitor/tailscale/expose.sh  # reach it from your phone
 ```
