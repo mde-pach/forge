@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 
-from forge.checks import manifests, orphans
+from forge.checks import documented_commands, manifests, orphans
 from forge.registry import REGISTRY, ROOT, roles
 
 
@@ -60,6 +60,21 @@ def _proofs() -> list[tuple[str, bool, str]]:
             "cardinality is the mechanism that stops a second install path",
         )
     )
+
+    doc = ROOT / "stacks/nextjs/template/README.md"
+    original = doc.read_text()
+    try:
+        doc.write_text(original + "\nbun run __not_a_real_script\n")
+        caught = any("__not_a_real_script" in e for e in documented_commands.check())
+    finally:
+        doc.write_text(original)
+    out.append(
+        (
+            "a document naming a command that does not exist is caught",
+            caught,
+            "prose has no compiler; this is the smallest thing that gives it one",
+        )
+    )
     return out
 
 
@@ -77,6 +92,15 @@ def run(_args: Sequence[str] = ()) -> int:
             print(f"  FAIL  {e}")
     else:
         print("  ok    every capability manifest matches the contract")
+
+    print("documented commands")
+    doc_errs = documented_commands.check()
+    if doc_errs:
+        failures += len(doc_errs)
+        for e in doc_errs:
+            print(f"  FAIL  {e}")
+    else:
+        print("  ok    every command a document tells you to run is declared")
 
     print("reachability")
     orphaned, described = orphans.find()

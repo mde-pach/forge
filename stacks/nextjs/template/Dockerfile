@@ -1,14 +1,19 @@
 # syntax=docker/dockerfile:1
 # Three stages, following vercel/next.js examples/with-docker.
 # Requires `output: "standalone"` in next.config.ts.
+#
+# bun installs and builds; node runs. Next's standalone output ships a
+# server.js meant for node, so the runtime stage stays node - and staying node
+# keeps the final image free of a toolchain it never uses.
+ARG BUN_VERSION=1.2-slim
 ARG NODE_VERSION=22-slim
 
-FROM node:${NODE_VERSION} AS deps
+FROM oven/bun:${BUN_VERSION} AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
 RUN --mount=type=cache,target=/root/.bun bun install --frozen-lockfile
 
-FROM node:${NODE_VERSION} AS builder
+FROM oven/bun:${BUN_VERSION} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

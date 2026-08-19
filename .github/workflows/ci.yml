@@ -116,7 +116,17 @@ jobs:
       - name: the projected plugins are complete
         run: |
           set -euo pipefail
-          test -x plugins/forge-monitor/hooks/emit.sh
+          # NOT `test -x`. The exec bit cannot survive a git-API push, and the
+          # design deliberately stopped depending on it - hooks are invoked as
+          # `sh <script>`. Asserting the mode here re-introduced a requirement
+          # the neighbouring step exists to make irrelevant, which is the same
+          # additive reflex this whole change set is about.
+          # The real property is that the launcher runs whatever its mode is:
+          test -f plugins/forge-monitor/hooks/emit.sh
+          chmod -x plugins/forge-monitor/hooks/emit.sh
+          printf '{"session_id":"ci","cwd":"/tmp"}' \
+            | FORGE_MONITOR_STATE=$(mktemp -d) sh plugins/forge-monitor/hooks/emit.sh Stop
+          printf '{"cwd":"/tmp","prompt":"x"}' | sh plugins/forge-guard/hooks/run.sh inventory.py >/dev/null
           test -f plugins/forge-monitor/hooks/hooks.json
           test -f plugins/forge-guard/hooks/hooks.json
           PYTHONPATH=src python3 -m forge.cli --help | grep -q 'forge <command>'
