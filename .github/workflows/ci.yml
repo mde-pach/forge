@@ -90,9 +90,17 @@ jobs:
           test -d dist/plugin/skills/scaffold/stacks/nextjs/template
           # And the same for a real install: the projected skill must run.
           bash bootstrap/install.sh project "$RUNNER_TEMP/installed"
-          bash "$RUNNER_TEMP/installed/.claude/skills/scaffold/scaffold.sh" 2>&1 \
-            | grep -q 'usage: scaffold.sh' \
-            || { echo "the projected scaffold skill is not runnable"; exit 1; }
+          # Capture, then assert. `cmd | grep -q ... || fail` cannot work here:
+          # scaffold.sh with no arguments prints its usage and exits 1 (correct
+          # behaviour), and under `set -o pipefail` the pipeline takes THAT
+          # status, not grep's - so the check failed even though the usage line
+          # was found. Third time a check has tested the wrong thing.
+          out=$(bash "$RUNNER_TEMP/installed/.claude/skills/scaffold/scaffold.sh" 2>&1 || true)
+          grep -q 'usage: scaffold.sh' <<<"$out" || {
+            echo "the projected scaffold skill is not runnable; it printed:"
+            printf '%s\n' "$out"
+            exit 1
+          }
 
       - name: the docs build, with dead links treated as failures
         run: |
