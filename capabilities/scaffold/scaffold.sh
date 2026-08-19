@@ -89,13 +89,13 @@ done
 command -v jq >/dev/null || echo "scaffold: WARNING - jq not found; the hooks will block until it is installed" >&2
 
 # Resolve dependencies. Without a lockfile the gate cannot run, the Dockerfile
-# cannot build (it bind-mounts the lock), and `npm ci` has nothing to install.
+# cannot build (it bind-mounts the lock), and a frozen install has nothing to do.
 installed=0
 case "$stack" in
   python)
     if command -v uv >/dev/null && (cd "$target" && uv sync >/dev/null 2>&1); then installed=1; fi ;;
   nextjs)
-    if command -v npm >/dev/null && (cd "$target" && npm install --no-audit --no-fund >/dev/null 2>&1); then installed=1; fi ;;
+    if command -v bun >/dev/null && (cd "$target" && bun install >/dev/null 2>&1); then installed=1; fi ;;
 esac
 
 # The project's own module must resolve to its own source tree. If an installed
@@ -150,6 +150,6 @@ next:
 EOF
 case "$stack" in
   python) echo "  cd $target && uv run pytest" ;;
-  nextjs) echo "  cd $target && npm run dev" ;;
+  nextjs) echo "  cd $target && bun run dev" ;;
 esac
 echo "  then fill in CLAUDE.md (it is a skeleton on purpose)"

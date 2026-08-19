@@ -1,8 +1,8 @@
 # Start a project
 
 ```bash
-bash .claude/skills/scaffold/scaffold.sh python /path/to/my-api "What it does"
-bash .claude/skills/scaffold/scaffold.sh nextjs /path/to/my-web "What it does"
+uv run forge scaffold python /path/to/my-api "What it does"
+uv run forge scaffold nextjs  /path/to/my-web "What it does"
 ```
 
 The last line of the output is the only one that matters:
@@ -18,7 +18,7 @@ not install, so nothing was proven.
 
 | | Python | Next.js |
 |---|---|---|
-| Package / runtime | uv, `src/` layout | npm, App Router |
+| Package / runtime | uv, `src/` layout | bun, App Router |
 | Lint + format | ruff 0.16 defaults | Biome (`recommended` preset, Next/React/test domains) |
 | Types | mypy `strict` + `warn_unreachable` | `tsc --noEmit`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` |
 | Tests | pytest | optional |
@@ -27,6 +27,7 @@ not install, so nothing was proven.
 | Compose | app + postgres 18 with a healthcheck | same |
 | CI | the same `gate.sh`, on 3.12/3.13/3.14, plus a docker build | the same `gate.sh`, plus a docker build |
 | Updates | Dependabot, 3–7 day cooldown | Dependabot, 3–7 day cooldown |
+| One entry point | `uv run <name>` | `bun run <name>` |
 
 ## The three layers of enforcement
 

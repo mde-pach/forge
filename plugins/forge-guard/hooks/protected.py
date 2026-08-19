@@ -47,7 +47,12 @@ REVIEW_DIR = ".claude/reviews"
 def changed(root: Path) -> list[str]:
     try:
         r = subprocess.run(
-            ["git", "status", "--porcelain"],
+            # -uall is load-bearing: without it git collapses a wholly-untracked
+            # directory to one `?? .claude/` line, so a brand-new
+            # .claude/settings.json is invisible - which is exactly how a hook or
+            # a settings file first appears. The guard saw edits to existing
+            # protected files and was blind to every new one.
+            ["git", "status", "--porcelain", "--untracked-files=all"],
             cwd=root,
             capture_output=True,
             text=True,

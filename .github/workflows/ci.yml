@@ -101,6 +101,9 @@ jobs:
           # A gate that prints its refusal and exits 0 is not a gate. This is
           # how the guard shipped for its first ten minutes: SystemExit is a
           # BaseException, and a bare handler swallowed the exit(2).
+          # Deliberately left untracked: git collapses a wholly-untracked
+          # directory in --porcelain output, which is how the guard was blind to
+          # every NEW protected file while seeing edits to existing ones.
           d=$(mktemp -d); git -C "$d" init -q; mkdir -p "$d/.claude"
           echo '{}' > "$d/.claude/settings.json"
           rc=0
@@ -204,6 +207,12 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+      # The template moved to bun, so the job that scaffolds it needs bun. CI
+      # caught this: the scaffold's own verifier went red because `bun install`
+      # never ran, so node_modules was missing and the gate blocked - correctly.
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: "1.2.0"
 
       - name: scaffold, and require the verifier to pass
         run: |

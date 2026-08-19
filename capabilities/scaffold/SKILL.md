@@ -8,13 +8,13 @@ description: Start a new project with forge's process enforcement already wired 
 ## Run it
 
 ```bash
-# installed as a skill (the usual case)
-bash .claude/skills/scaffold/scaffold.sh python /path/to/my-api "What it does"
-bash .claude/skills/scaffold/scaffold.sh nextjs /path/to/my-web "What it does"
-
-# from a forge checkout
-bash capabilities/scaffold/scaffold.sh python /path/to/my-api "What it does"
+uv run forge scaffold python /path/to/my-api "What it does"
+uv run forge scaffold nextjs  /path/to/my-web "What it does"
 ```
+
+There is one entry point. `uv` exposes only what `pyproject.toml` declares, so
+the script is never invoked by path — which is what stops a second way of
+creating projects appearing beside this one.
 
 The directory name becomes the project name; a Python module name is derived
 from it. Placeholders are substituted, hook scripts are made executable, and
