@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "description": "maxime's personal operating framework \\u2014 packaged, so nothing has to be installed at user scope and every environment reproduces the same setup.",
+  "description": "maxime's personal operating framework \u2014 packaged, so nothing has to be installed at user scope and every environment reproduces the same setup.",
   "owner": {
     "name": "mde-pach",
     "url": "https://github.com/mde-pach"
