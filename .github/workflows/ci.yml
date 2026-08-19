@@ -105,10 +105,11 @@ jobs:
       - name: the monitor cannot be seen by a session
         run: |
           set -euo pipefail
-          # 21 executable checks of the separation guarantee: the emitter is
-          # silent on every event, cannot block a turn, ships no skill or
-          # manifest, never lands in a project's .claude/, and the sink is
-          # swappable. If any of that stops being true, this goes red.
+          # 26 executable checks of the design claims: the emitter is silent on
+          # every event, can never block a turn, the unit is the session and not
+          # the machine, publishing is coalesced but attention never waits, a
+          # silent session is flagged rather than hidden, and no daemon is
+          # required for the state to be true.
           bash plugins/forge-monitor/verify.sh
 
       - name: the monitor is not a capability
