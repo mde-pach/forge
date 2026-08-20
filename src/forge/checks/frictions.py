@@ -9,10 +9,14 @@ policy does not enforce it - that is the same lesson as every other check here -
 so the policy is read out of the table now and failed on.
 
 **A citation of a row that no longer exists.** Removing closed rows breaks any
-file that pointed at one. `capabilities/scaffold/scaffold.sh` cited
-`forge friction #5`, and several surviving rows cited rows that were about to be
-deleted. A dangling citation is worse than no citation: it looks like evidence
-and resolves to nothing.
+file that pointed at one - a scaffold script cited a row about the executable
+bit, and several surviving rows cited rows that were about to be deleted. A
+dangling citation is worse than no citation: it looks like evidence and resolves
+to nothing.
+
+Note that the previous paragraph does not spell that citation out. Written in
+full it would BE one, and this file would fail its own check - which is exactly
+what happened, in CI, on the commit that introduced it.
 
 One recognised spelling, `friction NN` or `friction #NN`, for the same reason
 `uv run forge <cmd>` is the only recognised invocation. Prose that says "row NN"
@@ -28,7 +32,7 @@ from __future__ import annotations
 
 import re
 
-from forge.checks.orphans import tracked
+from forge.checks.orphans import repo_files
 from forge.registry import ROOT
 
 FRICTIONS = "FRICTIONS.md"
@@ -57,7 +61,7 @@ def check() -> list[str]:
     if not table:
         errs.append(f"{FRICTIONS} has no rows this check can read - the table format changed")
 
-    for f in tracked():
+    for f in repo_files():
         if f.endswith((".png", ".jpg", ".ico", ".woff", ".woff2")):
             continue
         try:

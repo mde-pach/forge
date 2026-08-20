@@ -10,9 +10,15 @@ set -uo pipefail
 MON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export FORGE_MONITOR_STATE="$TMP/state"
-pass=0; fail=0
+pass=0; fail=0; skip=0
 ok() { printf '  ok    %s\n' "$1"; pass=$((pass+1)); }
 no() { printf '  FAIL  %s\n' "$1"; fail=$((fail+1)); }
+# A check that cannot run must SAY so. This one silently vanished when `claude`
+# was not on PATH, so the summary read 37 locally and 36 in CI with no
+# explanation - a count that differs by environment without naming the reason
+# is a number nobody can act on, and one check short of the local run is exactly
+# how a check that tests nothing hides.
+skipped() { printf '  skip  %s (%s)\n' "$1" "$2"; skip=$((skip+1)); }
 
 EV='{"session_id":"verify-1","cwd":"/tmp/proj","permission_mode":"bypassPermissions"}'
 
@@ -146,8 +152,12 @@ if [ -f "$US" ] && grep -q 'forge-monitor\|emit\.sh' "$US" 2>/dev/null; then
 else ok "no reference in $US"; fi
 find "$MON_DIR" -name 'SKILL.md' -o -name 'manifest.yaml' -o -name '*.mcp.json' | grep -q . \
   && no "a session-facing surface exists" || ok "ships no skill, manifest or MCP server"
-command -v claude >/dev/null 2>&1 && { claude plugin validate "$MON_DIR" >/dev/null 2>&1 \
-  && ok "claude plugin validate passes" || no "claude plugin validate failed"; }
+if command -v claude >/dev/null 2>&1; then
+  claude plugin validate "$MON_DIR" >/dev/null 2>&1 \
+    && ok "claude plugin validate passes" || no "claude plugin validate failed"
+else
+  skipped "claude plugin validate" "claude is not on PATH"
+fi
 bad=$(python3 - "$MON_DIR/hooks/hooks.json" <<'PY'
 import json, sys
 cfg = json.load(open(sys.argv[1]))
@@ -211,5 +221,9 @@ case "$launch" in
   *) no "launcher output was: $launch" ;;
 esac
 
-printf '\n%s passed, %s failed\n' "$pass" "$fail"
+if [ "$skip" -gt 0 ]; then
+  printf '\n%s passed, %s failed, %s skipped\n' "$pass" "$fail" "$skip"
+else
+  printf '\n%s passed, %s failed\n' "$pass" "$fail"
+fi
 [ "$fail" -eq 0 ]

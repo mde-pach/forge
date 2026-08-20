@@ -44,7 +44,7 @@ def _proofs() -> list[tuple[str, bool, str]]:
     # the second time this exact trap has fired - the orphan checker's own
     # docstring did it first.
     planted = "plugins/forge-monitor/__planted" + "_orphan.sh"
-    found, _ = orphans.find([*orphans.tracked(), planted])
+    found, _ = orphans.find([*orphans.repo_files(), planted])
     out.append(
         (
             "orphan detection notices a planted file",
@@ -152,6 +152,23 @@ def _proofs() -> list[tuple[str, bool, str]]:
         )
     )
 
+    # The regression that made the two proofs above worthless for one commit:
+    # the file list was `git ls-files`, so a file that existed but had not been
+    # staged was invisible to every check built on it.
+    unstaged = ROOT / ("__unstaged" + "_probe.md")
+    try:
+        unstaged.write_text("probe\n")
+        sees_unstaged = str(unstaged.relative_to(ROOT)) in orphans.repo_files()
+    finally:
+        unstaged.unlink(missing_ok=True)
+    out.append(
+        (
+            "a file that exists but has not been staged is still checked",
+            sees_unstaged,
+            "new code is where new defects are, and the Stop hook runs before anyone stages it",
+        )
+    )
+
     doc = ROOT / "stacks/nextjs/template/README.md"
     before = doc.read_text()
     try:
@@ -221,7 +238,7 @@ def fast() -> tuple[int, list[str]]:
         + [f"{f} is described in prose but nothing runs it" for f in described]
         + [f"{f} is not cited by its own SKILL.md" for f in uncited]
     )
-    report("reachability", reach, "every tracked file is reachable from something that runs")
+    report("reachability", reach, "every file in the repo is reachable from something that runs")
     return failures, lines
 
 

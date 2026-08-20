@@ -104,9 +104,29 @@ SERVED_DIRS = ("plugins/forge-monitor/dashboard/",)
 COMMAND_MODULES = "src/forge/commands/*.py"
 
 
-def tracked() -> list[str]:
-    out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True)
-    return [line for line in out.stdout.splitlines() if line]
+def repo_files() -> list[str]:
+    """Every file git considers part of the repo, INCLUDING ones not yet added.
+
+    This was `git ls-files`, which lists only tracked files - so a brand-new
+    file was invisible to every check built on it until someone staged it. That
+    is precisely backwards: a file written thirty seconds ago is where a new
+    defect lives, and the Stop hook that runs these checks fires while it is
+    still untracked. It cost a red build to notice: the friction checker's own
+    docstring contained a dangling citation, its own check could not see the
+    file, and CI - which reads a fresh clone where everything is tracked - could.
+
+    `--exclude-standard` keeps .gitignore honoured, so build artifacts stay out.
+    A scratch file that is neither ignored nor used is not a false positive; it
+    is the thing being looked for.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return sorted({line for line in out.stdout.splitlines() if line})
 
 
 def _match(files: list[str], patterns: tuple[str, ...]) -> set[str]:
@@ -173,7 +193,7 @@ def _reachable(files: list[str], seeds: set[str], blocked: tuple[str, ...]) -> s
 
 def find(files: list[str] | None = None) -> tuple[list[str], list[str]]:
     """Returns (orphans, described_but_unused)."""
-    files = files or tracked()
+    files = files or repo_files()
     exec_live = _reachable(files, _match(files, EXEC_ROOTS), NON_PROPAGATING_EXEC)
     doc_live = _reachable(files, _match(files, DOC_ROOTS), NON_PROPAGATING_DOC)
 
@@ -204,7 +224,7 @@ def uncited_references(files: list[str] | None = None) -> list[str]:
     so one that nothing points to is shipped in every projection and read by
     nobody - and the capability that depends on it never gets it.
     """
-    files = files or tracked()
+    files = files or repo_files()
     out = []
     for f in files:
         if not fnmatch.fnmatch(f, REFERENCE_GLOB):

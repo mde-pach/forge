@@ -29,7 +29,7 @@ import fnmatch
 import re
 
 from forge import registry
-from forge.checks.orphans import tracked
+from forge.checks.orphans import repo_files
 from forge.registry import ROOT
 
 # Files whose contents count as invoking a command: things that run, plus the
@@ -78,7 +78,7 @@ def _callers(name: str, files: list[str]) -> list[str]:
 
 
 def call_sites() -> dict[str, list[str]]:
-    files = tracked()
+    files = repo_files()
     # `registry.REGISTRY`, not a name imported at module load: the proof that
     # this check works substitutes the table, and a bound name would keep
     # pointing at the original - so the check silently examined a registry that
@@ -92,7 +92,7 @@ def undeclared() -> list[str]:
     SKILL.md still instructing you to type it - a mechanism removed cleanly and
     still described everywhere, which is the same defect as the reverse."""
     known = {e.name for e in registry.REGISTRY}
-    files = tracked()
+    files = repo_files()
     out = []
     for f in files:
         if not any(fnmatch.fnmatch(f, p) for p in CALLER_ROOTS):
