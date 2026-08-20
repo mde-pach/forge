@@ -27,7 +27,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 
-from forge.checks import commands, documented_commands, handlers, manifests, orphans
+from forge.checks import commands, documented_commands, frictions, handlers, manifests, orphans
 from forge.registry import REGISTRY, ROLES, ROOT, roles
 
 
@@ -112,6 +112,46 @@ def _proofs() -> list[tuple[str, bool, str]]:
         )
     )
 
+    # Both friction proofs write to the tree, which is why they live here and
+    # not in the fast half the Stop hook runs.
+    fr = ROOT / "FRICTIONS.md"
+    before_fr = fr.read_text()
+    try:
+        fr.write_text(before_fr + "| 999 | 2026-01-01 | planted | closed by nothing |\n")
+        closed_caught = any("999" in e and "still here" in e for e in frictions.check())
+    finally:
+        fr.write_text(before_fr)
+    out.append(
+        (
+            "a friction marked closed and left in the file is caught",
+            closed_caught,
+            "the table reached 75 rows, 50 of them closed, because the policy was prose",
+        )
+    )
+
+    guinea = ROOT / "docs/how-to/docs.md"
+    before_g = guinea.read_text()
+    # Assembled, not written out: spelled in full here, the citation would be a
+    # real one, pointing at a row that does not exist - so the proof reported
+    # ITSELF and the check went red on a clean tree. It then did it a second
+    # time, in the comment explaining the first. Third and fourth outing for
+    # this trap overall: the orphan checker's
+    # docstring resurrected the file it named, and the planted-orphan proof did
+    # it again. A checker must not contain the thing it looks for.
+    marker = "friction " + "998"
+    try:
+        guinea.write_text(f"{before_g}\nSee {marker} for why.\n")
+        dangling_caught = any("998" in e for e in frictions.check())
+    finally:
+        guinea.write_text(before_g)
+    out.append(
+        (
+            "a citation of a friction that no longer exists is caught",
+            dangling_caught,
+            "removing closed rows breaks whatever pointed at them, silently",
+        )
+    )
+
     doc = ROOT / "stacks/nextjs/template/README.md"
     before = doc.read_text()
     try:
@@ -166,6 +206,12 @@ def fast() -> tuple[int, list[str]]:
         "documented commands",
         documented_commands.check(),
         "every command a document tells you to run is declared",
+    )
+
+    report(
+        "frictions",
+        frictions.check(),
+        f"{len(frictions.rows())} open, none marked closed, every citation resolves",
     )
 
     orphaned, described = orphans.find()

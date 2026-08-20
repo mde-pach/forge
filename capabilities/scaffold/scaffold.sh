@@ -76,7 +76,7 @@ while IFS= read -r -d '' f; do
   subst_file "$f"
 done < <(find "$target" -type f -print0)
 
-# The exec bit does not survive a git-API push (forge friction #5), and a hook
+# The exec bit does not survive a git-API push, and a hook
 # that is not executable fails silently with code 127 - the gate would be off
 # while looking on. Set it here, every time, and prove it.
 chmod +x "$target"/.claude/hooks/*.sh
