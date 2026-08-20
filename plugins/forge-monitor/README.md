@@ -141,6 +141,20 @@ long, and a **copy resume command** button — this is a window, not a remote
 control, so the least it can do is hand you `cd <cwd> && claude --resume <id>`
 rather than a session id to retype.
 
+It is a real PWA, not just a page that happens to be mobile-shaped:
+`manifest.webmanifest` makes it installable — your phone's "Add to Home
+Screen" gives it an icon and opens it in its own window, no browser chrome —
+and `sw.js` caches the page shell on first visit so a reload works with zero
+network. `snapshot.json` itself is fetched network-first, because a live view
+that silently shows minute-old data is worse than one that says so; when the
+network is the thing that's gone, the service worker falls back to the last
+snapshot this device ever saw, greyed as stale by the same age check the page
+already runs for a slow store. Same "stale beats blank" rule as `tick()`'s own
+catch block, extended to cover no network at all — including a cold start,
+with no page open yet to be holding anything in memory. Nothing here needs a
+build step: three static files, served by `serve.py` exactly like `index.html`
+always was.
+
 ## Known holes
 
 - **Never tested against a real session, or a real store.** Every test uses
@@ -157,3 +171,16 @@ rather than a session id to retype.
 - **The statusline is opt-in.** A plugin's settings support only two keys, so
   `statusline.sh` cannot be installed by the plugin. Point your own `statusLine`
   at it for cost, context-window and rate-limit numbers.
+- **Both caches are versioned by hand.** `sw.js` bumps `SHELL_CACHE`'s and
+  `DATA_CACHE`'s `-v1` suffix to invalidate old entries; a change that forgets
+  to bump one still reaches clients (cache-first refreshes in the background,
+  so it is never stuck forever) but one reload later than it should.
+- **The offline fallback persists what used to live only in memory.** Before
+  the service worker, a session's host and working directory existed in the
+  browser only for the life of the tab, in a JS variable. Now the last
+  snapshot is written to Cache Storage so it survives a reload with no
+  network — which is the point, but it also means that data now sits on disk
+  until the next successful fetch overwrites it, readable by anything with
+  access to that origin's storage (devtools, a shared or lost device). Low
+  risk, since the dashboard is reachable only over your own tailnet, but a
+  real change from "gone when you close the tab" worth knowing about.

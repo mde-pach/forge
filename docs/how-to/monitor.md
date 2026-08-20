@@ -154,8 +154,12 @@ enable **MagicDNS** first, then **HTTPS Certificates**.
 **3. Install Tailscale on your phone** and sign in to the **same** tailnet.
 
 **4. Run `uv run forge start` again.** It now prints a `tailnet` line. Open that
-URL on your phone and add it to the home screen; the waiting count appears in
-the title.
+URL on your phone and add it to the home screen — it is a real installable app
+(a web manifest and icon, not just a bookmark), so it opens in its own window
+with no browser chrome, and the waiting count appears in the title. It also
+works with the phone offline: the page shell is cached on first visit, and if
+the connection drops mid-session it keeps showing the last snapshot it saw,
+greyed out as stale rather than going blank.
 
 Only devices signed into your tailnet can reach it: nothing is published to the
 internet, no port is opened on this machine, and there is no certificate to

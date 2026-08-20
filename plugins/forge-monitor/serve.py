@@ -83,6 +83,18 @@ def find_token(cfg: dict) -> str | None:
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # The platform's own mimetypes database is what decides Content-Type for
+    # everything not listed here, and it does not agree with itself: Windows
+    # reads it out of the registry, some Linux images ship one with no PWA
+    # extensions in it at all. A wrong type here is not cosmetic - a manifest
+    # served as anything but a JSON-ish type is skipped by the install prompt,
+    # silently, with nothing in the console pointing back at this file.
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".webmanifest": "application/manifest+json",
+        ".js": "text/javascript",
+    }
+
     def __init__(self, *a, state: Path, **kw):
         self.state = state
         super().__init__(*a, directory=str(HERE / "dashboard"), **kw)

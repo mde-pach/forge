@@ -1,0 +1,15 @@
+<!--
+  Source for every raster icon this dashboard ships. One shape, rasterized at
+  each size a platform asks for, so there is one answer to "what does the icon
+  look like" instead of N drifting copies.
+
+  The dot is the same green as the "run" color variable in index.html's
+  stylesheet - the "all good, still running" color a session gets on the
+  dashboard itself. The
+  circle sits inside the inner 40% radius (safe zone) so a maskable mask
+  (a circle, a squircle, a rounded square - the OS picks) never clips it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0e1116"/>
+  <circle cx="256" cy="256" r="150" fill="#3fb950"/>
+</svg>

@@ -6,8 +6,11 @@
 <meta name="theme-color" content="#0e1116">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="sessions">
 <title>sessions</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%233fb950'/></svg>">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   :root{
     --bg:#0e1116; --card:#161b22; --line:#262e3a; --ink:#e6edf3;
@@ -166,6 +169,15 @@ async function tick(){
 tick();
 setInterval(tick, 10000);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
+
+// Offline is the point, not an edge case: a phone loses signal in an
+// elevator far more often than this page gets redeployed. The service
+// worker is what turns "no network" from a blank tab into last-known state.
+if("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

@@ -94,8 +94,13 @@ EXEMPT_PREFIX = ("stacks/", "contract/template/")
 # actually cited by its own SKILL.md, or orphaned from the thing that needs it?
 REFERENCE_GLOB = ".claude/skills/*/references/*"
 
-# A directory served or scanned as a whole, so its contents are never named.
-SERVED_DIRS = ("plugins/forge-monitor/dashboard/",)
+# Directories whose contents are found programmatically rather than named in
+# prose or code, so nothing could reference an individual file's path even in
+# principle: dashboard/ is served as a whole by serve.py, and .claude/reviews/
+# is looked up by recomputing a content-hash fingerprint of the reviewed files
+# (plugins/forge-guard/hooks/protected.py) - the filename is derived, never
+# written down anywhere else.
+SERVED_DIRS = ("plugins/forge-monitor/dashboard/", ".claude/reviews/")
 
 # Owned by forge.checks.commands, which asks a stricter question than this file
 # can: not "does any text mention it" but "does anything actually invoke it".
