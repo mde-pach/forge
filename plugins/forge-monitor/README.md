@@ -118,14 +118,19 @@ gh repo create <you>/forge-state --private
 **To look at it**, from any machine that can reach the API:
 
 ```bash
-python3 serve.py                  # http://127.0.0.1:7373
-bash tailscale/expose.sh          # prints your tailnet URL
+uv run forge start                # http://127.0.0.1:7373, plus your tailnet URL
 ```
+
+`serve.py` and `expose.sh` are not entry points; `forge start` is the only thing
+that runs them. It prints a readiness report first — whether the store is
+configured, whether a token was found, whether the store answered — because a
+diagnostic you have to know about and remember to run is one nobody runs. That
+report replaced a `forge doctor` command that nothing ever called.
 
 `tailscale serve`, never `tailscale funnel`: serve reaches devices on your
 tailnet, funnel publishes to the internet, and for session state that
-distinction is the whole security model. `expose.sh` is generic on purpose —
-`bash tailscale/expose.sh 3000` works for any local service.
+distinction is the whole security model. Stopping `forge start` takes the
+mapping down again.
 
 ## The dashboard
 

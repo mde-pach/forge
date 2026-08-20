@@ -8,13 +8,13 @@ description: Start a new project with forge's process enforcement already wired 
 ## Run it
 
 ```bash
-uv run forge scaffold python /path/to/my-api "What it does"
-uv run forge scaffold nextjs  /path/to/my-web "What it does"
+bash capabilities/scaffold/scaffold.sh python /path/to/my-api "What it does"
+bash capabilities/scaffold/scaffold.sh nextjs  /path/to/my-web "What it does"
 ```
 
-There is one entry point. `uv` exposes only what `pyproject.toml` declares, so
-the script is never invoked by path — which is what stops a second way of
-creating projects appearing beside this one.
+This is a capability, not a command. A session reaches it through this file;
+there is no `forge scaffold` verb, because adding one only created a second path
+to the same script - one that CI bypassed and that nobody typed.
 
 The directory name becomes the project name; a Python module name is derived
 from it. Placeholders are substituted, hook scripts are made executable, and

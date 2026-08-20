@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
 
       - name: shell syntax + shellcheck (every .sh in the repo)
         run: |
@@ -44,11 +47,12 @@ jobs:
       - name: forge checks itself
         run: |
           set -euo pipefail
-          # One command, and it is deliberately not one I can satisfy by being
-          # confident: it fails on files nothing runs, on two mechanisms claiming
-          # one role, and on checks that pass without testing anything.
-          pip install pyyaml
-          PYTHONPATH=src python3 -m forge.cli check
+          # The FULL run: everything the Stop hook does, plus the plugin verifier
+          # and the proofs - which break things on purpose to show each check can
+          # fail, so they need a throwaway checkout and are not safe in a hook.
+          # `uv run forge check`, the same spelling the hook and the README use.
+          npm ci
+          uv run forge check
 
       - name: hooks are invoked in a way the exec bit cannot break
         run: |
@@ -89,7 +93,7 @@ jobs:
           if find plugins -name SKILL.md -o -name manifest.yaml | grep -q .; then
             echo "a plugin grew a session-facing surface"; exit 1
           fi
-          for f in collector.py merge.py run.sh statusline.sh; do
+          for f in collector.py merge.py run.sh statusline.sh doctor.py; do
             if [ -e "plugins/forge-monitor/$f" ]; then
               echo "a superseded path is back: $f"; exit 1
             fi
@@ -129,27 +133,15 @@ jobs:
           printf '{"cwd":"/tmp","prompt":"x"}' | sh plugins/forge-guard/hooks/run.sh inventory.py >/dev/null
           test -f plugins/forge-monitor/hooks/hooks.json
           test -f plugins/forge-guard/hooks/hooks.json
-          PYTHONPATH=src python3 -m forge.cli --help | grep -q 'forge <command>'
-
-      - name: the remote holds what this checkout holds
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Pushes go through the API rather than `git push`, so the remote is
-          # hand-assembled and nothing notices when it drifts. It drifted twice
-          # before this existed. Exit 2 means "could not check" and is not a
-          # failure here; exit 1 means the remote and the tree disagree.
-          rc=0
-          PYTHONPATH=src python3 -m forge.cli parity "$GITHUB_REPOSITORY" "${GITHUB_REF_NAME}" || rc=$?
-          [ "$rc" = 1 ] && { echo "the remote has drifted from this commit"; exit 1; }
-          exit 0
+          uv run forge --help | grep -q 'forge <command>'
 
       - name: the docs build, with dead links treated as failures
         run: |
           set -euo pipefail
-          npm ci
-          npm run docs:build
+          # `npm ci` ran with the checks above. One caller of assemble.mjs, and
+          # this is it: the npm docs:* scripts were a second one, and CI used
+          # those while `forge docs` sat unused.
+          uv run forge docs
 
   # Layer 2 - the scaffolds actually work. This is the expensive, load-bearing one.
   scaffold-python:

@@ -12,17 +12,17 @@ anywhere - your laptop, another machine, a box that is always on - and why
 nothing breaks when it is not running at all. Sessions keep publishing; this is
 only a window.
 
-    python3 serve.py [--port 7373] [--state DIR]
+Not a script. `forge start` is the only thing that runs this, and the readiness
+report it prints on the way up uses `load_config` and `find_token` from here -
+so there is one answer to "where does the token come from", not two that drift.
 """
 
 from __future__ import annotations
 
-import argparse
 import base64
 import json
 import os
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -31,10 +31,55 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import ClassVar
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import paths
-
 HERE = Path(__file__).resolve().parent
+
+
+def load_config(state: Path) -> dict:
+    try:
+        return json.loads((state / "config.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def api(url: str, tok: str, etag: str | None = None):
+    """(status, decoded-json-or-None, etag). status 0 means the request never landed."""
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {tok}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    req.add_header("User-Agent", "forge-monitor")
+    if etag:
+        req.add_header("If-None-Match", etag)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read()
+            return r.status, (json.loads(raw) if raw else None), r.headers.get("ETag")
+    except urllib.error.HTTPError as e:
+        return e.code, None, e.headers.get("ETag")
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        return 0, None, None
+
+
+def find_token(cfg: dict) -> str | None:
+    """One answer to where the token comes from, in priority order."""
+    for var in ("FORGE_MONITOR_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        if os.environ.get(var):
+            return os.environ[var]
+    try:
+        r = subprocess.run(
+            ["gh", "auth", "token"], capture_output=True, text=True, timeout=10, check=False
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        pass
+    tf = (cfg.get("store") or {}).get("token_file")
+    if tf:
+        try:
+            return Path(tf).expanduser().read_text().strip() or None
+        except OSError:
+            pass
+    return None
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -53,47 +98,13 @@ class Handler(SimpleHTTPRequestHandler):
     _online: bool | None = None
 
     def _cfg(self) -> dict:
-        try:
-            return json.loads((self.state / "config.json").read_text())
-        except (OSError, ValueError):
-            return {}
+        return load_config(self.state)
 
     def _token(self, cfg: dict) -> str | None:
-        for var in ("FORGE_MONITOR_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
-            if os.environ.get(var):
-                return os.environ[var]
-        try:
-            r = subprocess.run(
-                ["gh", "auth", "token"], capture_output=True, text=True, timeout=10, check=False
-            )
-            if r.returncode == 0 and r.stdout.strip():
-                return r.stdout.strip()
-        except (subprocess.SubprocessError, OSError):
-            pass
-        tf = (cfg.get("store") or {}).get("token_file")
-        if tf:
-            try:
-                return Path(tf).expanduser().read_text().strip() or None
-            except OSError:
-                pass
-        return None
+        return find_token(cfg)
 
     def _api(self, url: str, tok: str, etag: str | None = None):
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"Bearer {tok}")
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", "2022-11-28")
-        req.add_header("User-Agent", "forge-monitor")
-        if etag:
-            req.add_header("If-None-Match", etag)
-        try:
-            with urllib.request.urlopen(req, timeout=20) as r:
-                raw = r.read()
-                return r.status, (json.loads(raw) if raw else None), r.headers.get("ETag")
-        except urllib.error.HTTPError as e:
-            return e.code, None, e.headers.get("ETag")
-        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
-            return 0, None, None
+        return api(url, tok, etag)
 
     def _from_store(self) -> list[dict] | None:
         cfg = self._cfg()
@@ -209,23 +220,14 @@ class Handler(SimpleHTTPRequestHandler):
         pass
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=int(os.environ.get("FORGE_MONITOR_PORT") or 7373))
-    ap.add_argument("--state", default=str(paths.state_dir()))
-    args = ap.parse_args()
-    state = Path(args.state)
+def serve_forever(port: int, state: Path) -> int:
+    """Block, serving the view on loopback. `forge start` owns everything else."""
     state.mkdir(parents=True, exist_ok=True)
-    srv = HTTPServer(("127.0.0.1", args.port), partial(Handler, state=state))
-    print(f"forge-monitor dashboard on http://127.0.0.1:{args.port}")
-    print(f"  state: {state}")
-    print("  reach it from your other devices: bash tailscale/expose.sh")
+    srv = HTTPServer(("127.0.0.1", port), partial(Handler, state=state))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        srv.server_close()
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

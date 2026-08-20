@@ -1,8 +1,11 @@
 # Start a project
 
+Ask the session to scaffold a project and the `scaffold` capability runs. To do
+it yourself:
+
 ```bash
-uv run forge scaffold python /path/to/my-api "What it does"
-uv run forge scaffold nextjs  /path/to/my-web "What it does"
+bash capabilities/scaffold/scaffold.sh python /path/to/my-api "What it does"
+bash capabilities/scaffold/scaffold.sh nextjs  /path/to/my-web "What it does"
 ```
 
 The last line of the output is the only one that matters:

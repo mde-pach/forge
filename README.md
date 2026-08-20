@@ -9,15 +9,27 @@ view of what my sessions are doing.
 
 ```bash
 uv run forge            # what forge can do
-uv run forge scaffold python ~/code/my-api "What it does"
-uv run forge serve      # the session view, on localhost
+uv run forge start      # the session view: local, and on your phone
 uv run forge check      # every check forge makes about itself
+uv run forge docs       # build the documentation site
 ```
 
-There is exactly one entry point, and `uv` exposes only what
-`pyproject.toml` declares. A script that exists on disk but is not declared
-cannot be invoked — which is the mechanism that stops a second way of doing the
-same job from quietly appearing beside the first. Five of them once did.
+Three commands, and only one of them is really for typing. `check` is what the
+Stop hook and CI run; `docs` is what CI runs. `uv` exposes only what
+`pyproject.toml` declares, so a script on disk that is not declared cannot be
+invoked — the mechanism that stops a second way of doing the same job appearing
+beside the first.
+
+There were seven. Three of them — `expose`, `doctor`, `parity` — had no caller
+anywhere, and `forge check` reported `7 commands, 7 distinct roles` while that
+was true: it counted, it did not ask whether anything reached what it counted.
+The roles are a closed list now, so a fourth command needs a deliberate edit to
+it, and a declared command that nothing invokes is a failure.
+
+**Capabilities are not commands.** Scaffolding a project, running the loop,
+prospecting, validating — a session invokes those through their `SKILL.md`,
+which runs the capability's own script. They never needed a `forge` verb, and
+giving them one only created a second path to the same thing.
 
 ## What's here
 

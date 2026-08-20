@@ -1,29 +1,39 @@
-#!/usr/bin/env bash
-# Expose a loopback service to your own devices, and to nothing else.
+#!/usr/bin/env sh
+# Make a loopback port reachable from your own devices, and from nothing else.
 #
-# Written generically on purpose: this is the reachability primitive for the
-# whole stack, not just the dashboard. Anything you run on localhost - a dev
-# server, a preview, a log viewer - reaches your phone the same way.
+#   sh expose.sh on  PORT   -> prints the URL on stdout, nothing else
+#   sh expose.sh off PORT
 #
-#   bash expose.sh                 # dashboard, port 7373
-#   bash expose.sh 3000            # a dev server
-#   bash expose.sh 3000 /preview   # mounted at a path
-#   bash expose.sh --status
-#   bash expose.sh --off [PORT]
+# Called only by `forge start`, which tears the mapping down again when you stop
+# it. It prints the URL and nothing else on stdout because `forge start` reads
+# that; everything human goes to stderr.
 #
-# `tailscale serve` - never `tailscale funnel`. Serve reaches devices on your
-# tailnet; Funnel publishes to the open internet. For session state that
-# distinction is the entire security model, so Funnel is not an option this
+# `tailscale serve` - never `tailscale funnel`. Serve reaches devices signed in
+# to your tailnet; Funnel publishes to the open internet. For session state that
+# distinction is the whole security model, so Funnel is not an option this
 # script offers.
-set -euo pipefail
+#
+# An earlier version took an optional mount path and a --status mode, on the
+# theory that this was "the reachability primitive for the whole stack". Nothing
+# ever called it that way. Speculative generality in a script nothing else uses
+# is just more surface to keep correct.
+set -eu
 
-usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+mode="${1:-}"
+port="${2:-7373}"
 
-case "${1:-}" in
-  -h|--help) usage; exit 0 ;;
+case "$port" in ''|*[!0-9]*) echo "expose: '$port' is not a port" >&2; exit 1 ;; esac
+
+case "$mode" in
+  off)
+    tailscale serve --https=443 --bg "http://127.0.0.1:${port}" off >/dev/null 2>&1 \
+      || tailscale serve reset >/dev/null 2>&1 || true
+    exit 0 ;;
+  on) ;;
+  *) echo "usage: expose.sh on|off PORT" >&2; exit 1 ;;
 esac
 
-command -v tailscale >/dev/null || {
+command -v tailscale >/dev/null 2>&1 || {
   cat >&2 <<'MSG'
 tailscale is not installed.
   macOS   brew install --cask tailscale        (or the App Store build)
@@ -33,52 +43,17 @@ MSG
   exit 1
 }
 
-case "${1:-}" in
-  --status)
-    tailscale serve status
-    exit 0 ;;
-  --off)
-    port="${2:-7373}"
-    tailscale serve --https=443 --bg "http://127.0.0.1:${port}" off 2>/dev/null \
-      || tailscale serve reset
-    echo "stopped serving 127.0.0.1:${port}"
-    exit 0 ;;
-esac
-
-port="${1:-7373}"
-path="${2:-/}"
-
-case "$port" in ''|*[!0-9]*) echo "expose: '$port' is not a port" >&2; exit 1 ;; esac
-
-if ! tailscale status >/dev/null 2>&1; then
-  echo "expose: tailscale is installed but not connected. Run: sudo tailscale up" >&2
+tailscale status >/dev/null 2>&1 || {
+  echo "tailscale is installed but not connected. Run: sudo tailscale up" >&2
   exit 1
-fi
+}
 
-# The first run triggers a consent page to enable HTTPS certificates for the
-# tailnet. That is a one-time click, and the command below is what prompts it.
-if [ "$path" = "/" ]; then
-  tailscale serve --bg "http://127.0.0.1:${port}"
-else
-  tailscale serve --bg --set-path "$path" "http://127.0.0.1:${port}"
-fi
+# The first run triggers a one-time consent page enabling HTTPS certificates for
+# the tailnet. This command is what prompts it.
+tailscale serve --bg "http://127.0.0.1:${port}" >&2
 
 name=$(tailscale status --json 2>/dev/null \
-        | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("Self",{}).get("DNSName","").rstrip("."))' 2>/dev/null || true)
+        | python3 -c 'import json,sys; print(json.load(sys.stdin).get("Self",{}).get("DNSName","").rstrip("."))' 2>/dev/null || true)
 
-echo
-if [ -n "$name" ]; then
-  echo "reachable from your devices at: https://${name}${path}"
-else
-  echo "reachable from your devices - run 'tailscale serve status' for the URL"
-fi
-cat <<'MSG'
-
-Only devices signed in to your tailnet can reach it. Nothing is published to
-the internet, no port is open on this machine, and there is no certificate to
-renew.
-
-On your phone: open the URL in Safari or Chrome and add it to the home screen.
-It behaves like an app, and it is the same page whether the laptop is asleep or
-not - it just shows the last state it managed to read.
-MSG
+[ -n "$name" ] && printf 'https://%s/\n' "$name"
+exit 0

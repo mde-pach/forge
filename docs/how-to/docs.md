@@ -12,8 +12,9 @@ This is the standard docs pipeline for forge and for every project under it.
 
 ```
 npm install
-npm run docs:dev      # live-reload at localhost:5173
-npm run docs:build    # static site → docs/.vitepress/dist
+uv run forge docs --dev     # live-reload at localhost:5173
+uv run forge docs           # static site → docs/.vitepress/dist
+uv run forge docs --check   # fail if the generated pages are stale
 ```
 
 ## Deploy — GitHub Pages

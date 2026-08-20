@@ -86,32 +86,38 @@ and never your laptop.
 
 Start a session in that project, say anything, and let it finish a turn.
 
-**Check it worked:**
+## 5 · Look at it
 
 ```bash
-python3 plugins/forge-monitor/doctor.py
+uv run forge start
 ```
 
-Read three sections of the output. *EVENTS RECEIVED* should not be empty — if it
-is, the plugin isn't loaded, and `claude --debug` will say why. *FIELD DIFF*
-should say `ok` — anything else means Claude Code sends a field under a name the
-monitor doesn't read. *STORE* should say `HTTP 200`.
+That is the whole thing. It prints what it can see before serving anything:
 
-## 5 · See it from your phone
+```
+readiness
+  state      ~/.local/state/forge-monitor (3 local record(s))
+  store      mde-pach/forge-sessions@main - 3 session record(s)
 
-```bash
-python3 plugins/forge-monitor/serve.py
-bash plugins/forge-monitor/tailscale/expose.sh
+reach
+  local      http://127.0.0.1:7373
+  tailnet    https://laptop.tail1234.ts.net/
 ```
 
-The first run asks you to enable HTTPS certificates for your tailnet — a
-one-time click. `expose.sh` then prints a URL. Open it on your phone and add it
-to the home screen; the waiting count appears in the title.
+The `store` line is the one that matters. `not configured` means this machine's
+sessions only; `no token was found` names the four places it looked; `refused
+the token (403)` means the credential needs `contents` on that repository and
+nothing broader. In every case the view still opens and shows what it has — it
+is a window, not a gate, so it degrades rather than refusing.
 
-Only devices signed into your tailnet can reach it. Nothing is published to the
-internet, no port is opened on your machine, and there is no certificate to
-renew. `expose.sh` uses `tailscale serve`, never `tailscale funnel`, and does
-not offer funnel as an option.
+The tailnet line appears when tailscale is installed and connected. The first
+run asks you to enable HTTPS certificates for your tailnet — a one-time click.
+Open the URL on your phone and add it to the home screen; the waiting count
+appears in the title. Only devices signed into your tailnet can reach it:
+nothing is published to the internet, no port is opened on your machine, and
+there is no certificate to renew. It uses `tailscale serve`, never
+`tailscale funnel`, and does not offer funnel as an option. Stopping
+`forge start` takes the mapping down again.
 
 The dashboard reads the store, not your laptop, so it shows every session on
 every machine — and you can run it from any machine, or not at all.
@@ -123,13 +129,14 @@ and the local state directory can be deleted by hand; nothing else was touched.
 
 ## When something is wrong
 
-`doctor.py` reads only, changes nothing, and its output is designed to be pasted
-somewhere for help. The five failures it distinguishes:
+There is no separate diagnostic command. There was one — `forge doctor` — and a
+readiness report you have to already know about, and remember to run, is a
+report nobody reads. `forge start` prints it every time instead.
 
-| Symptom in doctor.py | Meaning |
+| What you see | Meaning |
 |---|---|
-| `EVENTS RECEIVED` empty | the plugin never loaded, or hooks never fired |
-| `FIELD DIFF` shows `MISSING` | Claude Code names a field differently than the monitor expects |
-| `NOT HANDLED BY THE CODE` | a notification type nobody accounted for |
-| `STORE ... HTTP 401/403` | the credential is missing, wrong, or rate limited |
-| records `PENDING` | written locally, never published — usually the credential |
+| `store  not configured` | no `store.repo` in `config.json`; nothing is published |
+| `store  ... no token was found` | none of `FORGE_MONITOR_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` produced one |
+| `store  ... refused the token (403)` | the credential lacks `contents` on that repository. It is not retried with a broader scope |
+| `store  ... unreachable (network)` | the last state read is still shown |
+| `0 local record(s)` and an empty page | the plugin never loaded or the hooks never fired — `claude --debug` says why |

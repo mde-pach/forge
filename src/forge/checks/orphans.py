@@ -43,6 +43,14 @@ EXEC_ROOTS = (
     # themselves, so this file's own docstring - which names statusline.sh as an
     # example of dead code - made statusline.sh reachable. A checker must not be
     # a liveness root for what it describes.
+    #
+    # Command modules are roots so that what they use stays live - drop them and
+    # serve.py, paths.py and the dashboard all go dark. But being a root is why
+    # a dead command was invisible: declaring it made it live BY DEFINITION, and
+    # three of seven had no caller while this check reported everything
+    # reachable. So they are roots here and unreportable here (COMMAND_MODULES,
+    # below); whether anything actually invokes one is a stricter question,
+    # asked by forge.checks.commands. One property, one owner.
     "src/forge/*.py",
     "src/forge/commands/*.py",
     "plugins/*/.claude-plugin/plugin.json",
@@ -72,7 +80,7 @@ CONVENTIONAL = re.compile(
     r"(^|/)("
     r"SKILL\.md|manifest\.yaml|plugin\.json|marketplace\.json|hooks\.json|settings\.json"
     r"|__init__\.py|\.gitkeep|\.gitignore|\.nvmrc|CLAUDE\.md|FRICTIONS\.md|README\.md"
-    r"|LICENSE|dependabot\.yml|package-lock\.json|index\.md"
+    r"|LICENSE|dependabot\.yml|package-lock\.json|uv\.lock|index\.md"
     r")$"
 )
 
@@ -88,6 +96,12 @@ REFERENCE_GLOB = "capabilities/*/references/*"
 
 # A directory served or scanned as a whole, so its contents are never named.
 SERVED_DIRS = ("plugins/forge-monitor/dashboard/",)
+
+# Owned by forge.checks.commands, which asks a stricter question than this file
+# can: not "does any text mention it" but "does anything actually invoke it".
+# Reported here as well, they would be false positives; reported here INSTEAD,
+# they were invisible.
+COMMAND_MODULES = "src/forge/commands/*.py"
 
 
 def tracked() -> list[str]:
@@ -165,7 +179,10 @@ def find(files: list[str] | None = None) -> tuple[list[str], list[str]]:
 
     def ignorable(f: str) -> bool:
         return (
-            bool(CONVENTIONAL.search(f)) or f.startswith(EXEMPT_PREFIX) or f.startswith(SERVED_DIRS)
+            bool(CONVENTIONAL.search(f))
+            or f.startswith(EXEMPT_PREFIX)
+            or f.startswith(SERVED_DIRS)
+            or fnmatch.fnmatch(f, COMMAND_MODULES)
         )
 
     orphans = sorted(f for f in files if f not in exec_live | doc_live and not ignorable(f))

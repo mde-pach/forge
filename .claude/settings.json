@@ -1,10 +1,30 @@
 {
   "extraKnownMarketplaces": {
     "forge": {
-      "source": { "source": "github", "repo": "mde-pach/forge" }
+      "source": {
+        "source": "github",
+        "repo": "mde-pach/forge"
+      }
     }
   },
   "enabledPlugins": {
-    "forge-monitor@forge": true
+    "forge-monitor@forge": true,
+    "forge-guard@forge": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate.sh"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ]
   }
 }

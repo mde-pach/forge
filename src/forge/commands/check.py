@@ -1,11 +1,24 @@
 """
 Every check forge makes about itself.
 
-Each check is paired with a *proof that it works*: a deliberate break that the
-check must notice. An assertion nobody has ever seen fail is not evidence -
-two of the monitor's checks passed while testing nothing, and generated test
-suites reaching 100% line coverage have been measured catching 4% of injected
-faults. Coverage is not detection.
+Two modes, split by cost and by side-effects rather than by taste:
+
+  --fast   read-only, sub-second, no writes. This is what the Stop hook runs on
+           every turn, so it must never touch the working tree and must never
+           be slow enough to be worth disabling.
+  (full)   everything, including the plugin verifier and the proofs. CI runs
+           this on a throwaway checkout, where taking ninety seconds and
+           writing a file are both fine.
+
+The proofs are the reason the full mode cannot be the hook. `_proofs()` breaks
+things on purpose - it appends a bogus command to a template README and asserts
+the check notices - and doing that while a session is editing the same tree
+races it and leaves the file corrupted if the process dies. They stay in CI.
+
+Each check is paired with such a proof because an assertion nobody has ever
+seen fail is not evidence: two of the monitor's checks passed while testing
+nothing, and generated suites reaching 100% line coverage have been measured
+catching 4% of injected faults. Coverage is not detection.
 """
 
 from __future__ import annotations
@@ -14,12 +27,15 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 
-from forge.checks import documented_commands, handlers, manifests, orphans
-from forge.registry import REGISTRY, ROOT, roles
+from forge.checks import commands, documented_commands, handlers, manifests, orphans
+from forge.registry import REGISTRY, ROLES, ROOT, roles
 
 
 def _proofs() -> list[tuple[str, bool, str]]:
     """Break something on purpose; the check must notice. Name, passed, detail."""
+    import forge.registry as reg
+    from forge.registry import Entry
+
     out: list[tuple[str, bool, str]] = []
 
     # The name is assembled rather than written, because this file is a
@@ -37,36 +53,39 @@ def _proofs() -> list[tuple[str, bool, str]]:
         )
     )
 
-    dup_rejected = False
-    try:
-        from forge.registry import Entry, _validate
+    original = reg.REGISTRY
 
-        original = REGISTRY
-        import forge.registry as reg
-
-        reg.REGISTRY = (*original, Entry("dup", original[0].role, "x", "x:y"))
+    def _rejects(entry: Entry) -> bool:
         try:
-            _validate()
-        except ValueError:
-            dup_rejected = True
+            reg.REGISTRY = (*original, entry)
+            try:
+                reg.validate()
+            except ValueError:
+                return True
+            return False
         finally:
             reg.REGISTRY = original
-    except Exception:  # noqa: BLE001
-        dup_rejected = False
+
     out.append(
         (
             "the registry rejects two entries with one role",
-            dup_rejected,
-            "cardinality is the mechanism that stops a second install path",
+            _rejects(Entry("dup", original[0].role, "x", "x:y")),
+            "cardinality is what stops a second mechanism for a job that has one",
+        )
+    )
+    out.append(
+        (
+            "the registry rejects a role that is not in ROLES",
+            _rejects(Entry("invented", "a-brand-new-job", "x", "x:y")),
+            (
+                "uniqueness alone is free to satisfy - you just type a new role beside "
+                "the new command, which is exactly how forge reached seven"
+            ),
         )
     )
 
-    import forge.registry as reg
-    from forge.registry import Entry
-
-    original = reg.REGISTRY
     try:
-        reg.REGISTRY = (*original, Entry("ghost", "ghost-role", "x", "forge.commands.nothing:run"))
+        reg.REGISTRY = (*original, Entry("ghost", ROLES[0], "x", "forge.commands.nothing:run"))
         ghost_caught = any("does not import" in e for e in handlers.check())
     finally:
         reg.REGISTRY = original
@@ -78,13 +97,28 @@ def _proofs() -> list[tuple[str, bool, str]]:
         )
     )
 
-    doc = ROOT / "stacks/nextjs/template/README.md"
-    original = doc.read_text()
+    # A command nothing calls. `__uncalled` appears in no workflow, hook or
+    # how-to, which is the whole point.
     try:
-        doc.write_text(original + "\nbun run __not_a_real_script\n")
+        reg.REGISTRY = (*original, Entry("__uncalled", ROLES[0], "x", "forge.commands.check:run"))
+        uncalled_caught = any("__uncalled" in e for e in commands.check())
+    finally:
+        reg.REGISTRY = original
+    out.append(
+        (
+            "a declared command that nothing invokes is caught",
+            uncalled_caught,
+            "three of seven commands had no caller while the registry reported ok",
+        )
+    )
+
+    doc = ROOT / "stacks/nextjs/template/README.md"
+    before = doc.read_text()
+    try:
+        doc.write_text(before + "\nbun run __not_a_real_script\n")
         caught = any("__not_a_real_script" in e for e in documented_commands.check())
     finally:
-        doc.write_text(original)
+        doc.write_text(before)
     out.append(
         (
             "a document naming a command that does not exist is caught",
@@ -95,50 +129,65 @@ def _proofs() -> list[tuple[str, bool, str]]:
     return out
 
 
-def run(_args: Sequence[str] = ()) -> int:
+def fast() -> tuple[int, list[str]]:
+    """Read-only checks. Returns (failures, lines). Writes nothing, anywhere."""
+    lines: list[str] = []
     failures = 0
 
-    print("registry")
-    print(f"  ok    {len(REGISTRY)} commands, {len(roles())} distinct roles")
+    def report(title: str, errs: list[str], ok: str) -> None:
+        nonlocal failures
+        lines.append(title)
+        if errs:
+            failures += len(errs)
+            lines.extend(f"  FAIL  {e}" for e in errs)
+        else:
+            lines.append(f"  ok    {ok}")
 
+    lines.append("registry")
+    lines.append(f"  ok    {len(REGISTRY)} commands, {len(roles())} of {len(ROLES)} roles filled")
     handler_errs = handlers.check()
     if handler_errs:
         failures += len(handler_errs)
-        for e in handler_errs:
-            print(f"  FAIL  {e}")
+        lines.extend(f"  FAIL  {e}" for e in handler_errs)
     else:
-        print("  ok    every declared command resolves to a callable")
+        lines.append("  ok    every declared command resolves to a callable")
 
-    print("capability manifests")
-    errs = manifests.check()
-    if errs:
-        failures += len(errs)
-        for e in errs:
-            print(f"  FAIL  {e}")
-    else:
-        print("  ok    every capability manifest matches the contract")
+    report(
+        "command call sites",
+        commands.check(),
+        "every declared command is invoked by something outside the registry",
+    )
+    report(
+        "capability manifests",
+        manifests.check(),
+        "every capability manifest matches the contract",
+    )
+    report(
+        "documented commands",
+        documented_commands.check(),
+        "every command a document tells you to run is declared",
+    )
 
-    print("documented commands")
-    doc_errs = documented_commands.check()
-    if doc_errs:
-        failures += len(doc_errs)
-        for e in doc_errs:
-            print(f"  FAIL  {e}")
-    else:
-        print("  ok    every command a document tells you to run is declared")
-
-    print("reachability")
     orphaned, described = orphans.find()
     uncited = orphans.uncited_references()
-    for f in orphaned:
-        print(f"  FAIL  {f} is referenced by nothing")
-    for f in described:
-        print(f"  FAIL  {f} is described in prose but nothing runs it")
-    for f in uncited:
-        print(f"  FAIL  {f} is not cited by its own SKILL.md")
-    failures += len(orphaned) + len(described) + len(uncited)
-    if not (orphaned or described or uncited):
-        print("  ok    every tracked file is reachable from something that runs")
+    reach = (
+        [f"{f} is referenced by nothing" for f in orphaned]
+        + [f"{f} is described in prose but nothing runs it" for f in described]
+        + [f"{f} is not cited by its own SKILL.md" for f in uncited]
+    )
+    report("reachability", reach, "every tracked file is reachable from something that runs")
+    return failures, lines
+
+
+def run(args: Sequence[str] = ()) -> int:
+    fast_only = "--fast" in args
+    failures, lines = fast()
+    print("\n".join(lines))
+
+    if fast_only:
+        print()
+        print("clean" if failures == 0 else f"{failures} problem(s)")
+        return 1 if failures else 0
 
     print("plugin behaviour")
     verifier = ROOT / "plugins" / "forge-monitor" / "verify.sh"
