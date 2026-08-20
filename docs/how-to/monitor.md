@@ -12,8 +12,9 @@ something to work around. Note where it broke.
 - **Claude Code**, and **Python 3.9 or newer** (`python3 --version`)
 - **[GitHub CLI](https://cli.github.com)**, for the credential. No personal
   access token is created or stored.
-- **[Tailscale](https://tailscale.com/download)**, only for step 4 — reaching
-  the dashboard from your phone.
+- **[Tailscale](https://tailscale.com/download)**, only if you want the dashboard
+  on your phone. Optional — without it everything works on loopback. Setting it
+  up is in step 4.
 
 Linux, macOS and Windows are all supported. On Windows, run the commands in Git
 Bash or WSL.
@@ -103,13 +104,64 @@ the token (403)` means the credential needs `contents` on that repository and
 nothing broader. In every case the view still opens and shows what it has — it
 is a window, not a gate, so it degrades rather than refusing.
 
-The tailnet line appears when tailscale is installed and connected. The first
-run asks you to enable HTTPS certificates for your tailnet — a one-time click.
-Open the URL on your phone and add it to the home screen; the waiting count
-appears in the title. Only devices signed into your tailnet can reach it:
-nothing is published to the internet, no port is opened on your machine, and
-there is no certificate to renew. It uses `tailscale serve`, never
-`tailscale funnel`, and does not offer funnel as an option. Stopping
+The `tailnet` line appears only once Tailscale is installed and connected. If it
+says `tailscale is not installed, so this is loopback only`, that is not a
+failure — the dashboard works, it is just on this machine. Set it up when you
+want it on your phone.
+
+### Reaching it from your phone
+
+Four one-time steps.
+
+**1. Install Tailscale on this machine and sign in.**
+
+```bash
+# macOS  — the standalone build is the one Tailscale recommends
+brew install --cask tailscale
+# Linux
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+Then check the CLI is reachable, because `forge start` looks for it on `PATH`:
+
+```bash
+command -v tailscale && tailscale status
+```
+
+If `command -v` finds nothing, you have the Mac App Store build, which keeps the
+binary inside the application bundle rather than on `PATH`. Find it with
+`ls /Applications/Tailscale.app/Contents/MacOS/` and alias it in your shell
+profile. If you hit this, note the exact path — it belongs in
+`.claude/skills/scaffold/references/verified-stack-facts.md`, because it is the
+kind of fact that otherwise gets rediscovered every time.
+
+**2. Enable HTTPS for your tailnet.** `tailscale serve` needs it, and it is a
+one-time setting for the whole tailnet, not per device. In the admin console at
+[console.tailscale.com/admin/dns](https://console.tailscale.com/admin/dns),
+enable **MagicDNS** first, then **HTTPS Certificates**.
+
+> **Read this before you enable it.** Every TLS certificate on the web is
+> recorded in the public Certificate Transparency ledger, and Tailscale is
+> explicit that this includes your device names: *"your machine names and your
+> tailnet DNS name will be published on a public ledger"*, and *"do not enable
+> the HTTPS feature if any of your machine names contain sensitive
+> information"*. Your tailnet gets an obscured name like `yak-bebop.ts.net`, but
+> the hostname of the laptop you serve from becomes public. No session data is
+> exposed — only names — but rename the machine first if its name says something
+> you would rather it did not.
+
+**3. Install Tailscale on your phone** and sign in to the **same** tailnet.
+
+**4. Run `uv run forge start` again.** It now prints a `tailnet` line. Open that
+URL on your phone and add it to the home screen; the waiting count appears in
+the title.
+
+Only devices signed into your tailnet can reach it: nothing is published to the
+internet, no port is opened on this machine, and there is no certificate to
+renew. It uses `tailscale serve`, never `tailscale funnel` — serve reaches your
+own devices, funnel publishes to the open internet, and for session state that
+distinction is the whole security model, so funnel is not offered. Stopping
 `forge start` takes the mapping down again.
 
 The dashboard reads the store, not your laptop, so it shows every session on
