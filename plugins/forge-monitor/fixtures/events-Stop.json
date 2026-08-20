@@ -1,0 +1,14 @@
+{
+  "_provenance": "captured from a real Claude Code Stop hook payload on 2026-08-20; session_id, cwd, transcript_path, prompt_id and last_assistant_message sanitized, field names untouched",
+  "session_id": "fixture-1",
+  "transcript_path": "/tmp/proj/.claude/projects/-tmp-proj/fixture-1.jsonl",
+  "cwd": "/tmp/proj",
+  "prompt_id": "00000000-0000-0000-0000-000000000000",
+  "permission_mode": "bypassPermissions",
+  "effort": {"level": "high"},
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Done. Everything the summary claims was run, and the exit codes were read.",
+  "background_tasks": [],
+  "session_crons": []
+}

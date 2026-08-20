@@ -95,6 +95,23 @@ def write_record(path: Path, rec: dict) -> None:
     tmp.replace(path)  # atomic: a reader never sees half a record
 
 
+def upload_payload(rec: dict) -> dict:
+    """What the store receives: the record minus this machine's bookkeeping.
+
+    `store_sha` and `publish_attempted_at` were always local-only. So is
+    `published_at`: it is stamped locally AFTER a successful PUT, so a copy of
+    it in the upload is always one publish stale - the very first record in the
+    store carried published_at < last_seen and thereby declared itself
+    unpublished forever, by this file's own pending() rule. Only the machine
+    that publishes needs the stamp; the store gets none.
+    """
+    payload = dict(rec)
+    payload.pop("store_sha", None)
+    payload.pop("publish_attempted_at", None)
+    payload.pop("published_at", None)
+    return payload
+
+
 def publish_one(state: Path, cfg: dict, tok: str, sid: str) -> bool:
     f = state / "sessions" / f"{sid}.json"
     try:
@@ -109,9 +126,7 @@ def publish_one(state: Path, cfg: dict, tok: str, sid: str) -> bool:
 
     path = f"sessions/{sid}.json"
     url = f"{API}/repos/{repo}/contents/{path}"
-    payload = dict(rec)
-    payload.pop("store_sha", None)  # bookkeeping, not state
-    payload.pop("publish_attempted_at", None)
+    payload = upload_payload(rec)
 
     body = {
         "message": f"{rec.get('project') or 'session'} {sid[:8]}: {rec.get('state', '?')}"

@@ -38,8 +38,17 @@ for c in "garbage:not json" "empty:"; do
 done
 rc=0; FORGE_MONITOR_STATE=/proc/nowhere bash "$MON_DIR/hooks/emit.sh" Stop </dev/null >/dev/null 2>&1 || rc=$?
 [ "$rc" = 0 ] && ok "unwritable state dir exits 0" || no "unwritable state dir exited $rc"
-rc=0; printf '%s' "$EV" | env -i PATH=/usr/bin:/bin bash "$MON_DIR/hooks/emit.sh" Stop >/dev/null 2>&1 || rc=$?
+# FORGE_MONITOR_STATE is passed through the stripped environment on purpose:
+# without it, this test's payload lands in the REAL state dir - eight verify-1
+# Stop events were found in a production event log, one per full check run,
+# and a verify-1 row can reach the real dashboard. A test that leaks into the
+# state it exists to protect is the exact inversion of its job.
+rc=0; printf '%s' "$EV" | env -i PATH=/usr/bin:/bin FORGE_MONITOR_STATE="$FORGE_MONITOR_STATE" \
+  bash "$MON_DIR/hooks/emit.sh" Stop >/dev/null 2>&1 || rc=$?
 [ "$rc" = 0 ] && ok "a stripped environment exits 0" || no "stripped environment exited $rc"
+[ -f "$FORGE_MONITOR_STATE/events-Stop.ndjson" ] \
+  && ok "the stripped-environment event landed in the harness state dir, not the real one" \
+  || no "the stripped-environment event did not reach \$FORGE_MONITOR_STATE - it went somewhere real"
 
 echo "3. every hook runs async, so none is on the critical path"
 n=$(python3 -c "
@@ -144,6 +153,18 @@ print(','.join(publish.pending(Path('$pend'))))")
                   || no "expected pending=p1, got '$got'"
 rc=0; FORGE_MONITOR_STATE="$pend" python3 "$MON_DIR/publish.py" --flush >/dev/null 2>&1 || rc=$?
 [ "$rc" = 0 ] && ok "publishing with no store or token exits 0 silently" || no "publish exited $rc"
+# The store never receives this machine's bookkeeping - in particular not
+# published_at, which is stamped AFTER upload and so was always one publish
+# stale in the store copy, making every published record declare itself
+# unpublished forever by pending()'s own rule.
+kept=$(python3 -c "
+import sys; sys.path.insert(0, '$MON_DIR'); import publish
+r = {'session_id':'u1','state':'ended','last_seen':'2026-01-02T00:00:00Z',
+     'published_at':'2026-01-01T00:00:00Z','store_sha':'abc','publish_attempted_at':'x'}
+print(','.join(sorted(publish.upload_payload(r))))")
+[ "$kept" = "last_seen,session_id,state" ] \
+  && ok "the upload carries no publish stamp or bookkeeping (got: $kept)" \
+  || no "the upload leaks bookkeeping: $kept"
 
 echo "8. nothing is installed at user scope, and nothing is session-facing"
 US="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
@@ -220,6 +241,52 @@ case "$launch" in
   "rc=0") ok "the launcher runs the hook and stays silent" ;;
   *) no "launcher output was: $launch" ;;
 esac
+
+echo "11. a captured payload folds into the fields the record promises"
+# The fixtures are real hook payloads, sanitized (ids and paths replaced, field
+# names untouched - the field names ARE the fixture). They exist because the
+# first record ever published carried end_reason: null: record.py read a field
+# no payload has ever contained, and nothing compared the code to a payload.
+# This is that comparison. An event with no captured payload yet is a skip that
+# says so, not a silent pass - SessionStart has never been observed to fire,
+# which is an open question, so its fixture cannot honestly exist yet.
+FIX="$MON_DIR/fixtures"
+fold_field() {  # $1 payload file, $2 event, $3 field -> value, or MISSING when null/absent
+  FORGE_MONITOR_STATE="$TMP/fold-$(basename "$1" .json)" python3 - "$MON_DIR" "$1" "$2" "$3" <<'PYFOLD'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import record, paths
+p = json.load(open(sys.argv[2]))
+record.handle(sys.argv[3], p)
+rec = json.loads((paths.state_dir() / "sessions" / (p["session_id"] + ".json")).read_text())
+v = rec.get(sys.argv[4])
+print("MISSING" if v is None else v)
+PYFOLD
+}
+for spec in "SessionEnd:end_reason" "Stop:last_message" "Notification:attention_reason" \
+            "SessionStart:start_reason"; do
+  ev="${spec%%:*}"; field="${spec#*:}"
+  if [ -f "$FIX/events-$ev.json" ]; then
+    got=$(fold_field "$FIX/events-$ev.json" "$ev" "$field")
+    [ "$got" != "MISSING" ] \
+      && ok "$ev's payload populates $field ($got)" \
+      || no "$ev folded but $field is null - record.py reads a field the payload does not carry"
+  else
+    skipped "$ev payload populates $field" "no captured payload yet"
+  fi
+done
+# The break this check must notice: the same payload with its load-bearing
+# field renamed must fail. Assembled at run time, not committed - a fixture
+# whose job is to be wrong would be a file waiting to be mistaken for a shape.
+python3 -c "
+import json
+p = json.load(open('$FIX/events-SessionEnd.json'))
+p['renamed_away'] = p.pop('reason')
+open('$TMP/broken-SessionEnd.json', 'w').write(json.dumps(p))"
+got=$(fold_field "$TMP/broken-SessionEnd.json" SessionEnd end_reason)
+[ "$got" = "MISSING" ] \
+  && ok "a renamed payload field is noticed (this check can actually fail)" \
+  || no "the broken payload still produced end_reason='$got'; the check proves nothing"
 
 if [ "$skip" -gt 0 ]; then
   printf '\n%s passed, %s failed, %s skipped\n' "$pass" "$fail" "$skip"

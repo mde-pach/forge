@@ -157,12 +157,14 @@ always was.
 
 ## Known holes
 
-- **Never tested against a real session, or a real store.** Every test uses
-  payloads written by hand from documentation, and this sandbox gets a 403 from
-  `api.github.com`, so neither the PUT nor the conditional GET has ever run
-  against GitHub. If a field name or a response shape is wrong, the dashboard
-  shows an empty waiting list forever and nothing fails loudly. This is the
-  first thing to fix.
+- **Partially tested against a real session and a real store.** The publish
+  PUT has now run against GitHub for real (session `ab38b2dd`, 2026-08-20, ten
+  commits), and `fixtures/` holds captured, sanitized payloads that verify.sh 11
+  replays through `record.fold` — that check exists because the first real
+  session exposed exactly the failure this bullet predicted: `end_reason`
+  shipped null off a guessed field name. Still never exercised for real: the
+  409/422 conditional-GET retry path, and SessionStart — which has never been
+  observed to fire at all, so its payload shape rests on documentation alone.
 - **Cloud sessions run the plugin but cannot publish** — the container is
   isolated and discarded, and giving it a credential means giving the agent one.
   Undecided.

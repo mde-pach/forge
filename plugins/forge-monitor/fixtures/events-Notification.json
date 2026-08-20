@@ -1,0 +1,10 @@
+{
+  "_provenance": "captured from a real Claude Code Notification hook payload on 2026-08-20; session_id, cwd, transcript_path and prompt_id sanitized, field names untouched",
+  "session_id": "fixture-1",
+  "transcript_path": "/tmp/proj/.claude/projects/-tmp-proj/fixture-1.jsonl",
+  "cwd": "/tmp/proj",
+  "prompt_id": "00000000-0000-0000-0000-000000000000",
+  "hook_event_name": "Notification",
+  "message": "Claude is waiting for your input",
+  "notification_type": "idle_prompt"
+}

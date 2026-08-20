@@ -78,16 +78,24 @@ def fold(rec: dict, event: str, p: dict) -> bool:
 
     ntype = p.get("notification_type")
     if event == "SessionStart":
+        # The payload calls it `source` (startup/resume/clear/compact). Still
+        # written to documentation, not to a captured payload: SessionStart has
+        # never been observed to fire here - no events-SessionStart.ndjson
+        # exists - which is an open question of its own. Until one is captured,
+        # the fixture replay (verify.sh 11) skips this event, and says so.
         rec.update(
             state="working",
             attention_reason=None,
             ended=False,
-            start_reason=p.get("session_start_reason"),
+            start_reason=p.get("source"),
         )
     elif event == "SessionEnd":
-        rec.update(
-            state="ended", attention_reason=None, ended=True, end_reason=p.get("session_end_reason")
-        )
+        # The payload calls it `reason`, not `session_end_reason`. The first
+        # record ever published shipped end_reason: null because this line was
+        # written to a guessed name and nothing compared it to a real payload.
+        # The comparison is now a check: verify.sh 11 replays a captured
+        # payload through fold() and fails when this comes back null.
+        rec.update(state="ended", attention_reason=None, ended=True, end_reason=p.get("reason"))
     elif event == "Notification" and ntype in ATTENTION:
         rec.update(
             state="blocked",

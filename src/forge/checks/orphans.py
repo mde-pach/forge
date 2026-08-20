@@ -99,8 +99,14 @@ REFERENCE_GLOB = ".claude/skills/*/references/*"
 # principle: dashboard/ is served as a whole by serve.py, and .claude/reviews/
 # is looked up by recomputing a content-hash fingerprint of the reviewed files
 # (plugins/forge-guard/hooks/protected.py) - the filename is derived, never
-# written down anywhere else.
-SERVED_DIRS = ("plugins/forge-monitor/dashboard/", ".claude/reviews/")
+# written down anywhere else - and fixtures/ is found by assembling
+# events-<EventName>.json from the event under test (verify.sh 11), so no
+# fixture's path is ever spelled out either.
+SERVED_DIRS = (
+    "plugins/forge-monitor/dashboard/",
+    "plugins/forge-monitor/fixtures/",
+    ".claude/reviews/",
+)
 
 # Owned by forge.checks.commands, which asks a stricter question than this file
 # can: not "does any text mention it" but "does anything actually invoke it".
