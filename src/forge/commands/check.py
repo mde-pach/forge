@@ -253,22 +253,33 @@ def run(args: Sequence[str] = ()) -> int:
         return 1 if failures else 0
 
     print("plugin behaviour")
-    verifier = ROOT / "plugins" / "forge-monitor" / "verify.sh"
-    if shutil.which("bash") and verifier.is_file():
+    # Every plugin's verifier, found by convention rather than named: naming
+    # one here is how forge-guard shipped with no check at all - the hardcoded
+    # path ran the monitor's verifier and nothing noticed the guard had none.
+    verifiers = sorted((ROOT / "plugins").glob("*/verify.sh"))
+    if not shutil.which("bash"):
+        failures += 1
+        print("  FAIL  bash is missing; no plugin verifier can run")
+    elif not verifiers:
+        failures += 1
+        print("  FAIL  no plugin ships a verifier")
+    for verifier in verifiers:
+        name = verifier.parent.name
         r = subprocess.run(["bash", str(verifier)], capture_output=True, text=True, check=False)
         tail = (r.stdout or "").strip().splitlines()
         summary = tail[-1] if tail else "no output"
         if r.returncode == 0:
-            print(f"  ok    the session monitor: {summary}")
+            print(f"  ok    {name}: {summary}")
         else:
             failures += 1
-            print(f"  FAIL  the session monitor: {summary}")
+            print(f"  FAIL  {name}: {summary}")
             for line in tail:
                 if "FAIL" in line:
                     print(f"        {line.strip()}")
-    else:
-        failures += 1
-        print("  FAIL  the session monitor's verifier is missing")
+    for plugin in sorted(p.parent.name for p in (ROOT / "plugins").glob("*/.claude-plugin")):
+        if not (ROOT / "plugins" / plugin / "verify.sh").is_file():
+            failures += 1
+            print(f"  FAIL  plugin {plugin} ships no verifier - its behaviour is checked by nothing")
 
     print("the checks themselves")
     for name, passed, why in _proofs():

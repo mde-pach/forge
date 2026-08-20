@@ -3,6 +3,11 @@
 # file inside the directory it creates is not a guarantee this repo makes.
 .venv/
 node_modules/
+# Ephemeral loop-release counters (gate.sh and forge-guard). They exist only
+# while a Stop hook is mid-argument with a session; ignoring them keeps the
+# orphan check from flagging machine state as a repo file.
+.claude/.gate-state
+.claude/.guard-state
 docs/generated/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
