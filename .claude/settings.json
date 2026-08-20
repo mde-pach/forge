@@ -8,11 +8,39 @@
     }
   },
   "enabledPlugins": {
-    "forge-monitor@forge": true,
-    "forge-guard@forge": true
+    "forge-monitor@forge": false,
+    "forge-guard@forge": false
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "-c",
+              "t=$(mktemp) || { printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: mktemp failed.\"}\\n'; exit 0; }; if git -C \"${CLAUDE_PROJECT_DIR:-.}\" show origin/main:plugins/forge-guard/hooks/inventory.py >\"$t\" 2>/dev/null; then for py in python3 python py; do if command -v \"$py\" >/dev/null 2>&1; then \"$py\" \"$t\"; rc=$?; rm -f \"$t\"; exit $rc; fi; done; rm -f \"$t\"; printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: no python interpreter found.\"}\\n'; exit 0; fi; rm -f \"$t\"; printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: origin/main:plugins/forge-guard/hooks/inventory.py is not extractable (no git, no origin remote, or a shallow clone).\"}\\n'; exit 0"
+            ],
+            "timeout": 20
+          }
+        ]
+      }
+    ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "-c",
+              "t=$(mktemp) || { printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: mktemp failed.\"}\\n'; exit 0; }; if git -C \"${CLAUDE_PROJECT_DIR:-.}\" show origin/main:plugins/forge-guard/hooks/protected.py >\"$t\" 2>/dev/null; then for py in python3 python py; do if command -v \"$py\" >/dev/null 2>&1; then \"$py\" \"$t\"; rc=$?; rm -f \"$t\"; exit $rc; fi; done; rm -f \"$t\"; printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: no python interpreter found.\"}\\n'; exit 0; fi; rm -f \"$t\"; printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: origin/main:plugins/forge-guard/hooks/protected.py is not extractable (no git, no origin remote, or a shallow clone).\"}\\n'; exit 0"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -22,6 +50,180 @@
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate.sh"
             ],
             "timeout": 120
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "Stop"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "SessionStart"
+            ],
+            "timeout": 90,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "SessionEnd"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "Notification"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "StopFailure"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "SubagentStart"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "SubagentStop"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "TeammateIdle"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "TaskCreated"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "TaskCompleted"
+            ],
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/plugins/forge-monitor/hooks/emit.sh",
+              "PreCompact"
+            ],
+            "timeout": 60,
+            "async": true
           }
         ]
       }

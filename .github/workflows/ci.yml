@@ -51,6 +51,12 @@ jobs:
           # and the proofs - which break things on purpose to show each check can
           # fail, so they need a throwaway checkout and are not safe in a hook.
           # `uv run forge check`, the same spelling the hook and the README use.
+          #
+          # The fetch exists for pull_request runs: their checkout has no
+          # refs/remotes/origin/main, and the hook-parity drift rule reads the
+          # guard's enforcing bytes from exactly that ref. Without it every PR
+          # goes red for a reason unrelated to the PR.
+          git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
           npm ci
           uv run forge check
 

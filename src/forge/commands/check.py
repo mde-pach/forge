@@ -27,7 +27,15 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 
-from forge.checks import commands, documented_commands, frictions, handlers, manifests, orphans
+from forge.checks import (
+    commands,
+    documented_commands,
+    frictions,
+    handlers,
+    hook_parity,
+    manifests,
+    orphans,
+)
 from forge.registry import REGISTRY, ROLES, ROOT, roles
 
 
@@ -68,6 +76,124 @@ def _proofs() -> list[tuple[str, bool, str]]:
                 "the exemption for filenames that are computed, never written, must hold",
             )
         )
+
+    # The parity check was born from one review finding (eleven hand-transcribed
+    # hook entries, nothing noticing drift) and hardened by a second (its guard
+    # side was a substring match, async was unchecked, the rollback window was
+    # silent). Each proof below drifts one copy in one of the named ways.
+    import copy
+    import json as _json
+
+    hp = hook_parity
+    real_settings = _json.loads((ROOT / hp.SETTINGS).read_text())
+    real_manifest = _json.loads((ROOT / hp.MONITOR_MANIFEST).read_text())
+
+    grown = copy.deepcopy(real_manifest)
+    grown["hooks"]["__PlantedEvent"] = [
+        {"hooks": [{"type": "command", "command": "sh", "args": ["x"], "timeout": 60}]}
+    ]
+    out.append(
+        (
+            "a manifest event missing from settings is caught",
+            any("__PlantedEvent" in e for e in hp.check(real_settings, grown)),
+            "a new monitor event that never fires here is exactly the drift the review flagged",
+        )
+    )
+
+    shrunk = copy.deepcopy(real_manifest)
+    del shrunk["hooks"]["PreCompact"]
+    out.append(
+        (
+            "a settings monitor event the manifest no longer declares is caught",
+            any("does not declare" in e for e in hp.check(real_settings, shrunk)),
+            "the other direction of the same drift: settings firing a ghost event",
+        )
+    )
+
+    drifted = copy.deepcopy(real_settings)
+    for _ev, _h in hp._flat(drifted["hooks"]):
+        if _h.get("args") == [hp.EMIT, "SessionEnd"]:
+            _h["timeout"] = 1
+    out.append(
+        (
+            "a settings timeout that differs from the manifest is caught",
+            any("SessionEnd" in e and "timeout" in e for e in hp.check(drifted, real_manifest)),
+            "same event, different behaviour, depending on which copy you read",
+        )
+    )
+
+    unpinned = copy.deepcopy(real_settings)
+    for _ev, _h in hp._flat(unpinned["hooks"]):
+        _h["args"] = [str(a).replace("origin/main:", "") for a in _h.get("args") or []]
+    out.append(
+        (
+            "a guard that runs from the working tree instead of origin/main is caught",
+            any("pinned" in e for e in hp.check(unpinned, real_manifest)),
+            "the guard must not be judged by the tree it is judging",
+        )
+    )
+
+    softened = copy.deepcopy(real_settings)
+    for _ev, _h in hp._flat(softened["hooks"]):
+        if _ev == "Stop" and _h.get("args", [None])[0] == "-c":
+            _h["async"] = True
+    out.append(
+        (
+            "an async guard is caught",
+            any("async guard" in e for e in hp.check(softened, real_manifest)),
+            "an async guard cannot block, which makes async the cheapest way to delete it",
+        )
+    )
+
+    reenabled = copy.deepcopy(real_settings)
+    reenabled["enabledPlugins"]["forge-guard@forge"] = True
+    out.append(
+        (
+            "a re-enabled marketplace plugin is caught",
+            any("both copies would fire" in e for e in hp.check(reenabled, real_manifest)),
+            "two live copies of one hook means every block and every record happens twice",
+        )
+    )
+
+    out.append(
+        (
+            "a pinned guard that differs from the tree copy is caught",
+            any("differs from the tree copy" in e for e in hp.drift(reader=lambda p: b"__tampered__")),
+            "the window between editing guard code and pushing it must be red, not silent",
+        )
+    )
+
+    doubled = copy.deepcopy(real_settings)
+    doubled["hooks"]["SessionEnd"].append(copy.deepcopy(doubled["hooks"]["SessionEnd"][0]))
+    out.append(
+        (
+            "a duplicated monitor entry is caught",
+            any("fires 2 times" in e for e in hp.check(doubled, real_manifest)),
+            "two live copies of one hook is a double-fire, not redundancy",
+        )
+    )
+
+    ghost = copy.deepcopy(real_settings)
+    ghost["hooks"]["SessionEnd"].append(copy.deepcopy(ghost["hooks"]["Stop"][0]))
+    out.append(
+        (
+            "a pinned guard runner on an undeclared event is caught",
+            any("does not declare" in e and "guard" in e for e in hp.check(ghost, real_manifest)),
+            "the guard side of the same ghost-event drift rule 2 covers for the monitor",
+        )
+    )
+
+    slow = copy.deepcopy(real_settings)
+    for _ev, _h in hp._flat(slow["hooks"]):
+        if _ev == "UserPromptSubmit" and (_h.get("args") or [None])[0] == "-c":
+            _h["timeout"] = 999
+    out.append(
+        (
+            "a guard timeout that differs from the manifest is caught",
+            any("UserPromptSubmit" in e and "timeout" in e for e in hp.check(slow, real_manifest)),
+            "same guard, different patience, depending on which copy you read",
+        )
+    )
 
     original = reg.REGISTRY
 
@@ -245,6 +371,12 @@ def fast() -> tuple[int, list[str]]:
         "frictions",
         frictions.check(),
         f"{len(frictions.rows())} open, none marked closed, every citation resolves",
+    )
+
+    report(
+        "hook parity",
+        hook_parity.check() + hook_parity.drift(),
+        "settings fire what the manifests declare: monitor from the tree, guard from origin/main",
     )
 
     orphaned, described = orphans.find()
