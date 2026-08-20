@@ -16,9 +16,14 @@ critique its own output has been measured making accuracy *worse* — 5% to 3% o
 one task — while the same model with a real external check reached 38%. Fresh
 context is not a formality here, it is the entire mechanism.
 
-The review is recorded by writing a file naming the reviewed commit-ish state;
-`forge review` (or a subagent) produces it. Reviews expire when the protected
-files change again, so one review cannot cover a later edit.
+The review is recorded by writing a file whose name fingerprints the reviewed
+content; a subagent with fresh context produces it. Reviews expire when the
+protected files change again, so one review cannot cover a later edit.
+
+This paragraph used to say `forge review` produces it. No such command has ever
+existed - the registry declares three, and none of them is that. The message
+this hook actually prints is self-contained and was always right; the docstring
+was describing a command someone intended to build.
 """
 
 from __future__ import annotations
