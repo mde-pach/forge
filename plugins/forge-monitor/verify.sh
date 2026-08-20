@@ -68,12 +68,35 @@ h=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions/
 [ -n "$h" ] && ok "the machine is a field on the record ($h), not a structure" \
              || no "the record carries no host field"
 
-echo "5. publishing is coalesced, and attention never waits"
+echo "5. publishing needs a difference, and attention never waits"
 r() { printf '{"session_id":"c-1"%s}' "$1" | python3 "$MON_DIR/record.py" "$2"; }
 a=$(r '' SessionStart); b=$(r '' Stop); c=$(r ',"notification_type":"agent_needs_input"' Notification)
 [ "$a" = publish ] && ok "a session starting publishes" || no "SessionStart said '$a'"
 [ "$b" = hold ]    && ok "a routine turn end is held back" || no "Stop said '$b', expected hold"
 [ "$c" = publish ] && ok "an attention event publishes immediately" || no "Notification said '$c'"
+# A demand already published does not publish again just because the event
+# repeats - the first monitored session put seven commits in the store that
+# differed only in last_seen. Content, not cadence.
+d=$(r ',"notification_type":"agent_needs_input"' Notification)
+[ "$d" = hold ] && ok "the same demand repeated is held - no commit spam" \
+                || no "a repeated identical demand said '$d'"
+# A Stop that a Stop hook forced to continue is work, not rest.
+e=$(r ',"stop_hook_active":true' Stop)
+st=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions/c-1.json'))['state'])")
+[ "$st" = working ] && ok "a hook-blocked Stop records the session as working, not idle" \
+                    || no "hook-blocked Stop recorded state '$st'"
+# An unchanged record still publishes eventually: the heartbeat keeps the
+# store's last_seen honest without a change to ride on.
+python3 - "$FORGE_MONITOR_STATE/sessions/c-1.json" <<'PYHB'
+import json, sys
+from datetime import datetime, timezone, timedelta
+p = sys.argv[1]; r = json.load(open(p))
+r["publish_attempted_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1200)).strftime("%Y-%m-%dT%H:%M:%SZ")
+open(p, "w").write(json.dumps(r))
+PYHB
+f=$(r ',"stop_hook_active":true' Stop)
+[ "$f" = publish ] && ok "an unchanged record heartbeats after the quiet interval" \
+                   || no "heartbeat said '$f'"
 
 echo "6. a silent session is flagged, never hidden"
 mkdir -p "$FORGE_MONITOR_STATE/sessions"
@@ -160,7 +183,8 @@ rc=0; FORGE_MONITOR_STATE="$pend" python3 "$MON_DIR/publish.py" --flush >/dev/nu
 kept=$(python3 -c "
 import sys; sys.path.insert(0, '$MON_DIR'); import publish
 r = {'session_id':'u1','state':'ended','last_seen':'2026-01-02T00:00:00Z',
-     'published_at':'2026-01-01T00:00:00Z','store_sha':'abc','publish_attempted_at':'x'}
+     'published_at':'2026-01-01T00:00:00Z','store_sha':'abc','publish_attempted_at':'x',
+     'publish_attempted_hash':'y'}
 print(','.join(sorted(publish.upload_payload(r))))")
 [ "$kept" = "last_seen,session_id,state" ] \
   && ok "the upload carries no publish stamp or bookkeeping (got: $kept)" \

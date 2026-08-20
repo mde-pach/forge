@@ -14,7 +14,7 @@ on the way up now, every time, and costs one conditional API request.
 
 It also *writes* the config rather than telling you to. The setup document used
 to have you locate a platform-specific state directory with a Python one-liner
-and hand-author a five-key JSON file - of which four keys were restatements of
+and hand-author a six-key JSON file - of which five keys were restatements of
 values already defaulted in the code. The one machine-specific fact is the store
 repository, and `gh` already knows your username. A readiness report that
 identifies a missing config and then hands you a document to read is the same
@@ -89,9 +89,10 @@ def _write_store(state: Path, repo: str) -> None:
 def _ensure_store(serve: ModuleType, state: Path, requested: str | None) -> None:
     """Make sure a store is configured, asking only when there is someone to ask.
 
-    Only `store.repo` is written. `branch`, `min_publish_seconds`, `stale_minutes`
-    and `forget_hours` all have defaults in the code that reads them, so writing
-    them here would be four lines of config restating four constants - and a
+    Only `store.repo` is written. `branch`, `min_publish_seconds`,
+    `heartbeat_publish_seconds`, `stale_minutes` and `forget_hours` all have
+    defaults in the code that reads them, so writing
+    them here would be five lines of config restating five constants - and a
     config key that duplicates a default is a second place for the value to live.
     """
     if requested:

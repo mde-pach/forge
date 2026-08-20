@@ -82,9 +82,10 @@ default, so the flag is really only for scripts.
 Only the repository is stored. The branch, how long to wait between routine
 updates, how long a session may go quiet before it is flagged and when finished
 sessions are forgotten all have defaults in the code that reads them — writing
-them into a config file would be four keys restating four constants, which is
-four more places for the value to disagree with itself. To change one, add
-`branch`, `min_publish_seconds`, `stale_minutes` or `forget_hours` to that file.
+them into a config file would be five keys restating five constants, which is
+five more places for the value to disagree with itself. To change one, add
+`branch`, `min_publish_seconds`, `heartbeat_publish_seconds`, `stale_minutes`
+or `forget_hours` to that file.
 
 It prints what it can see before serving anything:
 

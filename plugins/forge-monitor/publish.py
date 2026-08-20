@@ -108,6 +108,7 @@ def upload_payload(rec: dict) -> dict:
     payload = dict(rec)
     payload.pop("store_sha", None)
     payload.pop("publish_attempted_at", None)
+    payload.pop("publish_attempted_hash", None)
     payload.pop("published_at", None)
     return payload
 

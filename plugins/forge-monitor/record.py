@@ -15,6 +15,7 @@ Nothing here ever reaches the session: the hook that calls it discards output.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from datetime import UTC, datetime
@@ -42,13 +43,41 @@ def now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def min_publish_interval() -> int:
-    """Seconds between pushes for non-urgent events. Attention never waits."""
+def _cfg_seconds(key: str, default: int) -> int:
     try:
         cfg = json.loads((paths.state_dir() / "config.json").read_text())
-        return int(cfg.get("min_publish_seconds", 120))
+        return int(cfg.get(key, default))
     except (OSError, ValueError, TypeError):
-        return 120
+        return default
+
+
+def min_publish_interval() -> int:
+    """Seconds between pushes for non-urgent changes. Attention never waits."""
+    return _cfg_seconds("min_publish_seconds", 120)
+
+
+def heartbeat_interval() -> int:
+    """Seconds after which an UNCHANGED record publishes anyway, so the store's
+    last_seen stays honest enough for the dashboard's staleness maths."""
+    return _cfg_seconds("heartbeat_publish_seconds", 900)
+
+
+def content_hash(rec: dict) -> str:
+    """What a human would notice changing, hashed.
+
+    Excludes the fields that change on every event or every publish attempt
+    (last_seen and the bookkeeping) - left in, every event is a "change" and
+    coalescing is a rate limit rather than a difference test. That is not
+    hypothetical: the first monitored session put ten commits in the store,
+    seven of them saying "idle" and differing only in last_seen, one every two
+    minutes for as long as the session ran.
+    """
+    skim = {
+        k: v
+        for k, v in rec.items()
+        if k not in ("last_seen", "published_at", "publish_attempted_at", "publish_attempted_hash", "store_sha")
+    }
+    return hashlib.sha256(json.dumps(skim, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def since(iso: str | None) -> float:
@@ -61,10 +90,10 @@ def since(iso: str | None) -> float:
     return (datetime.now(UTC) - t).total_seconds()
 
 
-def fold(rec: dict, event: str, p: dict) -> bool:
-    """Update the record in place. Returns True if a human-visible thing changed."""
-    before = (rec.get("state"), rec.get("attention_reason"))
-
+def fold(rec: dict, event: str, p: dict) -> None:
+    """Update the record in place. Whether anything human-visible changed is
+    content_hash()'s question, asked by handle() - this used to return a
+    state-flip flag, which missed message changes and double-counted flips."""
     rec["session_id"] = p.get("session_id") or rec.get("session_id")
     rec["last_seen"] = now()
     rec["last_event"] = event
@@ -117,17 +146,23 @@ def fold(rec: dict, event: str, p: dict) -> bool:
     elif event == "StopFailure":
         rec.update(state="failed", attention_reason="turn failed", attention_since=now())
     elif event == "Stop":
-        # A turn ended. Not a demand by itself - the gate may have blocked it
-        # and the session may carry on. It does clear a previous demand.
-        rec.update(state="idle", attention_reason=None, attention_since=None)
-        msg = p.get("last_assistant_message")
-        if isinstance(msg, str) and msg.strip():
-            rec["last_message"] = msg.strip()[:280]
+        # stop_hook_active means a Stop hook forced the turn to CONTINUE - a
+        # gate arguing with the session. That is work, not rest: 45 of the
+        # first real session's 47 Stop events were these, and each one was
+        # recorded as "idle" (with mid-argument narration as last_message)
+        # while the session spun against its guard at full tilt.
+        if p.get("stop_hook_active"):
+            rec.update(state="working", attention_reason=None, attention_since=None)
+        else:
+            # A turn actually ended. Not a demand by itself - it does clear one.
+            rec.update(state="idle", attention_reason=None, attention_since=None)
+            msg = p.get("last_assistant_message")
+            if isinstance(msg, str) and msg.strip():
+                rec["last_message"] = msg.strip()[:280]
     elif event in ("SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted", "PreCompact"):
         rec.update(state="working", attention_reason=None, attention_since=None)
 
     rec["needs_attention"] = bool(rec.get("attention_reason")) and not rec.get("ended")
-    return before != (rec.get("state"), rec.get("attention_reason"))
 
 
 def handle(event: str, payload: dict) -> str:
@@ -144,19 +179,32 @@ def handle(event: str, payload: dict) -> str:
     except (OSError, ValueError):
         rec = {}
 
-    changed = fold(rec, event, payload)
+    fold(rec, event, payload)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(rec, indent=2))
     tmp.replace(f)  # atomic: a reader never sees a half-written record
 
-    # Coalescing is about rate, so it is gated on the last ATTEMPT, not the last
-    # success. Gating on success would spin on every event whenever the sink is
-    # broken - the moment you least want extra work happening in a hook.
+    # A publish needs a DIFFERENCE, not just an event. The old rule published
+    # every ALWAYS_PUBLISH event unconditionally and every state flip at a
+    # 120-second floor, which turned one guard-blocked session into a commit
+    # every two minutes saying nothing new. Now: a changed record publishes -
+    # immediately when it is urgent (lifecycle events, a session demanding
+    # attention), at the floor otherwise - and an UNCHANGED record publishes
+    # only as a slow heartbeat, so the store's last_seen cannot silently drift
+    # a whole workday. Still gated on the last ATTEMPT, not the last success:
+    # gating on success would spin on every event whenever the sink is broken,
+    # the moment you least want extra work happening in a hook.
+    h = content_hash(rec)
+    hash_changed = h != rec.get("publish_attempted_hash")
     urgent = event in ALWAYS_PUBLISH or rec.get("needs_attention")
-    stale = since(rec.get("publish_attempted_at")) >= min_publish_interval()
-    go = bool(urgent or (changed and stale))
+    idle_for = since(rec.get("publish_attempted_at"))
+    go = bool(
+        (hash_changed and (urgent or idle_for >= min_publish_interval()))
+        or idle_for >= heartbeat_interval()
+    )
     if go:
         rec["publish_attempted_at"] = now()
+        rec["publish_attempted_hash"] = h
         tmp.write_text(json.dumps(rec, indent=2))
         tmp.replace(f)
     return "publish" if go else "hold"

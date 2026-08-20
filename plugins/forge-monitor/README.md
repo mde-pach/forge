@@ -109,9 +109,10 @@ gh repo create <you>/forge-state --private
 // ~/.local/state/forge-monitor/config.json
 {
   "store": { "repo": "<you>/forge-state", "branch": "main" },
-  "min_publish_seconds": 120,   // rate limit for non-urgent events
-  "stale_minutes": 45,          // silence after which a record is flagged
-  "forget_hours": 72            // when finished records are deleted
+  "min_publish_seconds": 120,      // floor between publishes of a CHANGED record
+  "heartbeat_publish_seconds": 900, // an unchanged record still publishes this often
+  "stale_minutes": 45,             // silence after which a record is flagged
+  "forget_hours": 72               // when finished records are deleted
 }
 ```
 
