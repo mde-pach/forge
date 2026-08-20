@@ -11,7 +11,7 @@
 // what makes it hold with no network at all, including on a cold start with
 // no page open yet to hold state in a JS variable.
 
-const SHELL_CACHE = "forge-dashboard-shell-v1";
+const SHELL_CACHE = "forge-dashboard-shell-v2"; // bumped: index.html now shows dirty_files
 const DATA_CACHE = "forge-dashboard-data-v1";
 
 const SHELL_FILES = [

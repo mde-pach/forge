@@ -96,8 +96,14 @@ function card(s, waiting){
     </div>`;
   el.querySelector(".proj").textContent = s.project || s.name || "(no project)";
   el.querySelector(".since").textContent = ago(stamp) + (s.stale ? " ?" : "");
+  // Uncommitted work is a risk the dashboard exists to surface: a session
+  // once ended "fully reviewed and verified" with every line of it sitting
+  // unpushed on one machine, and nothing here said so.
+  const dirty = s.dirty_files > 0
+    ? ` · ${s.dirty_files} uncommitted file${s.dirty_files === 1 ? "" : "s"}`
+    : "";
   el.querySelector(".why").textContent =
-    (s.attention_reason || s.state || "") + (s.stale ? " · not heard from since" : "");
+    (s.attention_reason || s.state || "") + dirty + (s.stale ? " · not heard from since" : "");
   el.querySelector(".meta").textContent =
     [s.host, s.cwd, String(s.session_id || "").slice(0, 8)].filter(Boolean).join(" · ");
 

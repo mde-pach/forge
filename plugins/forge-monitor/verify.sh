@@ -68,6 +68,26 @@ h=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions/
 [ -n "$h" ] && ok "the machine is a field on the record ($h), not a structure" \
              || no "the record carries no host field"
 
+echo "4b. uncommitted work is a field on the record, not a post-mortem discovery"
+wt="$TMP/worktree"; mkdir -p "$wt"
+git -C "$wt" init -q 2>/dev/null
+git -C "$wt" config user.email v@v; git -C "$wt" config user.name v
+echo base > "$wt/base.txt"; git -C "$wt" add base.txt; git -C "$wt" commit -qm base
+echo a > "$wt/a.txt"; echo b > "$wt/b.txt"
+printf '{"session_id":"d-1","cwd":"%s"}' "$wt" | python3 "$MON_DIR/record.py" Stop >/dev/null
+dirty=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions/d-1.json')).get('dirty_files'))")
+[ "$dirty" = 2 ] && ok "two untracked files are counted on the record" \
+                 || no "dirty_files was '$dirty', expected 2"
+rm -f "$wt/a.txt" "$wt/b.txt"
+printf '{"session_id":"d-1","cwd":"%s"}' "$wt" | python3 "$MON_DIR/record.py" Stop >/dev/null
+dirty=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions/d-1.json')).get('dirty_files'))")
+[ "$dirty" = 0 ] && ok "a clean tree counts zero" || no "clean tree counted '$dirty'"
+nogit="$TMP/nogit"; mkdir -p "$nogit"
+printf '{"session_id":"d-2","cwd":"%s"}' "$nogit" | python3 "$MON_DIR/record.py" Stop >/dev/null
+absent=$(python3 -c "import json;print('dirty_files' in json.load(open('$FORGE_MONITOR_STATE/sessions/d-2.json')))")
+[ "$absent" = False ] && ok "a cwd that is not a git repo carries no count, and nothing breaks" \
+                      || no "non-git cwd produced a dirty_files field"
+
 echo "5. publishing needs a difference, and attention never waits"
 r() { printf '{"session_id":"c-1"%s}' "$1" | python3 "$MON_DIR/record.py" "$2"; }
 a=$(r '' SessionStart); b=$(r '' Stop); c=$(r ',"notification_type":"agent_needs_input"' Notification)

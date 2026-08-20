@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -75,9 +76,47 @@ def content_hash(rec: dict) -> str:
     skim = {
         k: v
         for k, v in rec.items()
-        if k not in ("last_seen", "published_at", "publish_attempted_at", "publish_attempted_hash", "store_sha")
+        if k
+        not in (
+            "last_seen",
+            "published_at",
+            "publish_attempted_at",
+            "publish_attempted_hash",
+            "store_sha",
+            # Deliberately churn, not change: the count moves with nearly every
+            # tool call during honest work, and hashing it would bring back the
+            # metronome this hash exists to silence. It rides along on whatever
+            # publish happens next - in particular on SessionEnd, which is the
+            # moment "ended with N uncommitted files" is the headline.
+            "dirty_files",
+        )
     }
     return hashlib.sha256(json.dumps(skim, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def dirty_count(cwd: str) -> int | None:
+    """How many files `git status` would show in the session's working tree.
+
+    The first monitored session ended reporting its work "fully reviewed and
+    verified" while every line of it existed uncommitted, on one machine - the
+    exact loss mode the store exists to prevent, invisible on the dashboard
+    built to prevent it. The record now carries the count; None means cwd is
+    not a git repo (or git is missing), which is not the monitor's business.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    if r.returncode != 0:
+        return None
+    return sum(1 for line in r.stdout.splitlines() if line.strip())
 
 
 def since(iso: str | None) -> float:
@@ -102,6 +141,9 @@ def fold(rec: dict, event: str, p: dict) -> None:
             rec[k] = p[k]
     if p.get("cwd"):
         rec["project"] = Path(p["cwd"]).name
+        d = dirty_count(p["cwd"])
+        if d is not None:
+            rec["dirty_files"] = d
     rec.setdefault("host", paths.hostname())
     rec.setdefault("first_seen", rec["last_seen"])
 
