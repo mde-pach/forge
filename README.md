@@ -26,10 +26,24 @@ was true: it counted, it did not ask whether anything reached what it counted.
 The roles are a closed list now, so a fourth command needs a deliberate edit to
 it, and a declared command that nothing invokes is a failure.
 
-**Capabilities are not commands.** Scaffolding a project, running the loop,
-prospecting, validating — a session invokes those through their `SKILL.md`,
-which runs the capability's own script. They never needed a `forge` verb, and
-giving them one only created a second path to the same thing.
+## What forge can do
+
+Clone this repository, open Claude Code in it, and ask. These are project skills
+in `.claude/skills/`, which Claude Code discovers by scanning — no plugin, no
+marketplace, no install step, and an edit takes effect in the session you are
+already in.
+
+| Capability | Ask for |
+|---|---|
+| `scaffold` | a new project, with its quality gates already wired |
+| `loop` | forge improving itself — learnings become reviewed diffs |
+| `prospect` | a sweep for opportunities worth building |
+| `validate` | evidence that an opportunity is real before you build it |
+| `repo-admin` | repository administration a session can actually perform |
+
+They are **not** commands, and a scaffolded project does not get them. Forge is
+where you ask; a project is where you build. A project gets the gates, the
+monitor and the guard — the things that constrain building — and nothing else.
 
 ## What's here
 
@@ -38,7 +52,8 @@ giving them one only created a second path to the same thing.
   at import, not a review comment.
 - **`kernel/`** — how Claude operates under forge. Seven behaviours, small by design.
 - **`contract/`** — the capability contract, frozen and versioned.
-- **`capabilities/`** — created only when a need demonstrates itself.
+- **`.claude/skills/`** — the capabilities. Project skills of this repository,
+  so a session started here already has them; see below.
 - **`stacks/`** — opinionated project templates, with their gates.
 - **`plugins/`** — Claude Code plugins forge maintains. Loaded at launch, never
   declared by your projects.

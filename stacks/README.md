@@ -12,4 +12,4 @@ Both ship a multi-stage Dockerfile, a compose file with Postgres and a
 healthcheck, and a CLAUDE.md skeleton the owner fills in.
 
 Evidence for every version and config choice:
-`capabilities/scaffold/references/verified-stack-facts.md`.
+`.claude/skills/scaffold/references/verified-stack-facts.md`.

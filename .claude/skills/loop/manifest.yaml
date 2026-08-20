@@ -1,0 +1,33 @@
+name: loop
+version: 0.1.0
+need: >
+  Work keeps producing learnings (corrections, caught-late errors, repeated
+  instructions, unserved needs) that die with the session instead of improving forge.
+triggers:
+  - reflect — end of any substantial piece of work
+  - an error reaches runtime that a boundary should have caught
+  - the same instruction is given manually for the second time
+  - a need occurs repeatedly with no capability serving it
+  - factorize (periodic, on demand)
+context:
+  loads: the session's own trajectory; the forge files a diff would target
+  never: unrelated capabilities' bodies; past sessions wholesale
+contract:
+  pre:
+    - forge is a clean git checkout (no uncommitted drift to contaminate diffs)
+  post:
+    - every learning is a concrete proposed diff against a named forge file, routed
+      to the right layer (kernel / contract / capability / stack)
+    - nothing is applied without human review; approved diffs are git commits
+  invariants:
+    - the contract's evolution rules (weaken pre / strengthen post; deprecate, don't delete)
+    - kernel stays within its size budget — a kernel addition must displace or justify itself
+verifier: >
+  The human, reviewing diffs — plus the factorization pass, which is graded by
+  net context size: a factorization that grows standing context has failed.
+reports: sbar
+evolution:
+  signals:
+    - proposed diffs repeatedly rejected for the same reason (loop is miscalibrated)
+    - learnings accumulating unrouted (a missing layer or capability)
+    - standing context size trending up across factorization passes

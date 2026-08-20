@@ -37,7 +37,7 @@ jobs:
           # find, not globstar: `**` does not descend into dot-directories, so a
           # glob would silently skip stacks/*/template/.claude/hooks/*.sh - the
           # most important scripts in the repo.
-          mapfile -d '' files < <(find capabilities stacks plugins -name '*.sh' -type f -print0)
+          mapfile -d '' files < <(find .claude stacks plugins -name '*.sh' -type f -print0)
           printf 'checking %d scripts\n' "${#files[@]}"
           [ "${#files[@]}" -ge 12 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
           for f in "${files[@]}"; do bash -n "$f"; done
@@ -159,7 +159,7 @@ jobs:
       - name: scaffold, and require the verifier to pass
         run: |
           set -euo pipefail
-          bash capabilities/scaffold/scaffold.sh python "$RUNNER_TEMP/py-app" 'CI probe | with & weird /chars/' | tee out.txt
+          bash .claude/skills/scaffold/scaffold.sh python "$RUNNER_TEMP/py-app" 'CI probe | with & weird /chars/' | tee out.txt
           grep -q 'verifier : PASS' out.txt || { echo "the scaffold verifier did not pass"; exit 1; }
 
       - name: the gate blocks a type error a linter cannot see
@@ -209,7 +209,7 @@ jobs:
       - name: a name the stdlib already owns is refused
         run: |
           set -euo pipefail
-          rc=0; bash capabilities/scaffold/scaffold.sh python "$RUNNER_TEMP/json" 2>/dev/null || rc=$?
+          rc=0; bash .claude/skills/scaffold/scaffold.sh python "$RUNNER_TEMP/json" 2>/dev/null || rc=$?
           [ "$rc" = 1 ] || { echo "scaffold accepted a stdlib module name"; exit 1; }
 
   scaffold-nextjs:
@@ -233,7 +233,7 @@ jobs:
       - name: scaffold, and require the verifier to pass
         run: |
           set -euo pipefail
-          bash capabilities/scaffold/scaffold.sh nextjs "$RUNNER_TEMP/web-app" 'CI probe | with & weird /chars/' | tee out.txt
+          bash .claude/skills/scaffold/scaffold.sh nextjs "$RUNNER_TEMP/web-app" 'CI probe | with & weird /chars/' | tee out.txt
           grep -q 'verifier : PASS' out.txt || { echo "the scaffold verifier did not pass"; exit 1; }
 
       - name: the gate is idempotent (next build rewrites tsconfig.json)

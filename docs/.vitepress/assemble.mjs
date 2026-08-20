@@ -18,8 +18,9 @@ for (const [src, dst] of Object.entries(map)) {
   if (!existsSync(join(root, src))) { console.error(`assemble: missing ${src}`); process.exit(1) }
   copyFileSync(join(root, src), join(out, dst))
 }
-for (const cap of readdirSync(join(root, 'capabilities'))) {
-  const skill = join(root, 'capabilities', cap, 'SKILL.md')
+// Capabilities are project skills of this repo: .claude/skills/<name>/SKILL.md
+for (const cap of readdirSync(join(root, '.claude', 'skills'))) {
+  const skill = join(root, '.claude', 'skills', cap, 'SKILL.md')
   if (existsSync(skill)) copyFileSync(skill, join(out, `capability-${cap}.md`))
 }
 // The base CLAUDE.md proposal: canonical file is kernel/CLAUDE.md.proposed.

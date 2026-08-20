@@ -92,7 +92,7 @@ EXEMPT_PREFIX = ("stacks/", "contract/template/")
 # only when a SKILL.md points at one. So "prose-only" is correct for them, and
 # the real question is a different one, checked separately below: is each
 # actually cited by its own SKILL.md, or orphaned from the thing that needs it?
-REFERENCE_GLOB = "capabilities/*/references/*"
+REFERENCE_GLOB = ".claude/skills/*/references/*"
 
 # A directory served or scanned as a whole, so its contents are never named.
 SERVED_DIRS = ("plugins/forge-monitor/dashboard/",)

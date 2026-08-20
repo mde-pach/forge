@@ -1,0 +1,41 @@
+name: scaffold
+version: 0.1.0
+need: >
+  New projects must start with process enforcement already wired, so correctness
+  is guaranteed by mechanism rather than by remembering to check.
+triggers:
+  - a new project is being started
+  - "scaffold <stack> <name>"
+  - an existing project needs forge's gates retrofitted
+context:
+  loads: the requested stack template under stacks/<stack>/template
+  never: other stacks' templates; the owner's project content
+contract:
+  pre:
+    - the target directory is empty or does not exist
+    - the stack exists under stacks/
+  post:
+    - >-
+      the generated project passes its own gate on the first run, with no edits
+      (verified by running the gate, not by assertion)
+    - hook scripts are executable and their blocking behaviour is proven by a
+      failing-file probe before the project is handed over
+    - CLAUDE.md is a skeleton for the owner to fill, never pre-filled prose
+  invariants:
+    - a gate that cannot block is never shipped - hooks decide on exit codes,
+      never by pattern-matching tool output
+    - the scaffold never creates a repository, chooses a host, or publishes
+verifier: >
+  Run the generated project's own gate twice - once on the untouched scaffold
+  (must pass) and once with a deliberately broken file (must exit 2).
+# Files outside this directory that the capability cannot run without.
+# The projection copies them in; without this, the projected skill is a
+# SKILL.md describing a script that is not there.
+assets:
+  - stacks
+reports: sbar
+evolution:
+  signals:
+    - a gate passes something it should have caught (the check is wrong)
+    - a gate blocks something correct (the check is too strict)
+    - the same manual fix is applied to every new project (it belongs in the template)

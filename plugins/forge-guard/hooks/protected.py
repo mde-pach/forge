@@ -32,6 +32,10 @@ from pathlib import Path
 PROTECTED = (
     ".claude/settings.json",
     ".claude/hooks/",
+    # A capability is what forge DOES when you ask it for something - closer to a
+    # rule than to code, and the one thing here a session could quietly rewrite
+    # mid-task to change its own instructions.
+    ".claude/skills/",
     ".claude-plugin/",
     "plugins/",
     ".github/workflows/",

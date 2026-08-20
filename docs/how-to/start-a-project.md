@@ -1,12 +1,13 @@
 # Start a project
 
-Ask the session to scaffold a project and the `scaffold` capability runs. To do
-it yourself:
+Open Claude Code in the forge checkout and say what you want:
 
-```bash
-bash capabilities/scaffold/scaffold.sh python /path/to/my-api "What it does"
-bash capabilities/scaffold/scaffold.sh nextjs  /path/to/my-web "What it does"
-```
+> Start a Next.js project at `~/code/my-web` — a dashboard for X.
+
+The `scaffold` capability is a project skill of the forge repository, so any
+session started there already has it. There is nothing to install and no command
+to type; the script it runs lives beside the skill, at
+`.claude/skills/scaffold/scaffold.sh`.
 
 The last line of the output is the only one that matters:
 

@@ -4,10 +4,10 @@ The one frozen artifact in forge. Every capability conforms to it. It evolves on
 
 ## A capability is
 
-A directory under `capabilities/<name>/` containing at minimum:
+A directory under `.claude/skills/<name>/` containing at minimum:
 
 ```
-capabilities/<name>/
+.claude/skills/<name>/
 ├── manifest.yaml     # cheap static metadata — the only part always visible
 ├── SKILL.md          # the procedure — loaded only when triggered
 └── references/       # optional depth — loaded only when SKILL.md points to it

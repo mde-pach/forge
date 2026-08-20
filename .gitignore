@@ -1,5 +1,7 @@
-dist/
-*.skill
+# uv writes .venv/.gitignore containing `*`, so this is belt and braces - but the
+# checks now list untracked files too, and relying on a tool to write an ignore
+# file inside the directory it creates is not a guarantee this repo makes.
+.venv/
 node_modules/
 docs/generated/
 docs/.vitepress/dist/

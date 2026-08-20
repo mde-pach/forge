@@ -8,18 +8,24 @@ import yaml
 
 from forge.registry import ROOT
 
+# Capabilities are project skills of the forge checkout: Claude Code discovers
+# `.claude/skills/<name>/SKILL.md` by scanning, with no plugin, no marketplace
+# and no projection - and picks up edits inside a running session. One copy,
+# loaded from the working tree you are sitting in.
+SKILLS = ".claude/skills"
+
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 KEBAB = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 REQUIRED = ("name", "version", "need", "triggers", "context", "contract", "verifier")
 
 
 def check() -> list[str]:
-    caps = ROOT / "capabilities"
+    caps = ROOT / SKILLS
     errors: list[str] = []
     if not caps.is_dir():
-        return ["no capabilities/ directory"]
+        return [f"no {SKILLS}/ directory"]
     for cap in sorted(p for p in caps.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        where = f"capabilities/{cap.name}"
+        where = f"{SKILLS}/{cap.name}"
         if not (cap / "SKILL.md").is_file():
             errors.append(f"{where}: no SKILL.md")
         path = cap / "manifest.yaml"
