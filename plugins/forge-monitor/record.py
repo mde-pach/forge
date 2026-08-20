@@ -83,6 +83,12 @@ def content_hash(rec: dict) -> str:
             "publish_attempted_at",
             "publish_attempted_hash",
             "store_sha",
+            # Nothing renders it, and leaving it in re-arms the metronome for
+            # sessions whose events ALTERNATE (SubagentStart/Stop both mean
+            # "working", but their names differ, so every alternation looked
+            # like a change). Review caught this; the observed spin was
+            # same-type events, which hid it.
+            "last_event",
             # Deliberately churn, not change: the count moves with nearly every
             # tool call during honest work, and hashing it would bring back the
             # metronome this hash exists to silence. It rides along on whatever
@@ -144,6 +150,11 @@ def fold(rec: dict, event: str, p: dict) -> None:
         d = dirty_count(p["cwd"])
         if d is not None:
             rec["dirty_files"] = d
+        else:
+            # Unknown is not "whatever it was last time": a count that cannot
+            # be measured now (repo gone, git gone, timeout) must not keep
+            # asserting the old number on the dashboard.
+            rec.pop("dirty_files", None)
     rec.setdefault("host", paths.hostname())
     rec.setdefault("first_seen", rec["last_seen"])
 
@@ -233,7 +244,9 @@ def handle(event: str, payload: dict) -> str:
     # immediately when it is urgent (lifecycle events, a session demanding
     # attention), at the floor otherwise - and an UNCHANGED record publishes
     # only as a slow heartbeat, so the store's last_seen cannot silently drift
-    # a whole workday. Still gated on the last ATTEMPT, not the last success:
+    # a workday WHILE EVENTS FLOW (a session emitting no events publishes
+    # nothing; that silence is the sweep's problem, and the dashboard's stale
+    # flag already names it). Still gated on the last ATTEMPT, not the last success:
     # gating on success would spin on every event whenever the sink is broken,
     # the moment you least want extra work happening in a hook.
     h = content_hash(rec)

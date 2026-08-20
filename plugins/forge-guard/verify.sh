@@ -59,7 +59,24 @@ printf '%s' "$err" | grep -q 'Do NOT give' \
   && ok "the block forbids handing the reviewer a verdict" \
   || no "nothing warns against priming the reviewer"
 
+echo "1b. a path git would quote is still seen - one accented byte is not a bypass"
+# With core.quotePath (the default), `git status --porcelain` C-quotes any
+# non-ASCII path, so `.claude/hooks/evíl.py` arrived as `".claude/hooks/..."`
+# - leading quote, no prefix match, guard silently passed. Found by review,
+# reproduced, fixed with -z. This keeps it fixed.
+d=$(mk_repo quoted)
+mkdir -p "$d/.claude/hooks"; printf 'x' > "$d/.claude/hooks/evíl.py"
+git -C "$d" config core.quotePath true
+run_guard "$d"
+{ [ "$rc" = 2 ] && printf '%s' "$err" | grep -q 'hooks/ev'; } \
+  && ok "a non-ASCII protected path blocks and is named" \
+  || no "quoted path bypassed the guard (rc=$rc)"
+
 echo "2. a recorded review with its prompt unblocks; one without does not"
+# Ordering note: this section deliberately ends on a PASS, which clears the
+# release counter raised by its two blocks. Add a third blocking assertion
+# here and the valve opens instead - the test would start asserting the
+# opposite of what it means to.
 fp=$(fp_of "$d")
 mkdir -p "$d/.claude/reviews"
 printf '# Review\nFindings.\n' > "$d/.claude/reviews/$fp.md"
@@ -77,8 +94,16 @@ run_guard "$d"
 echo "3. an identical block releases on the third attempt, loudly, then re-arms"
 d=$(mk_repo loop)
 mkdir -p "$d/.claude"; echo '{}' > "$d/.claude/settings.json"
+# The gate's own counter churns beside the guard's in a real Stop cycle; if
+# either counter file were counted by the guard, every block would carry a
+# fresh fingerprint and the valve would be sealed by its own bookkeeping -
+# which is exactly how the first version of this test failed, and review
+# found the gate-state variant of the same seal.
+echo 'digest 1' > "$d/.claude/.gate-state"
 run_guard "$d"; r1=$rc
+echo 'digest 2' > "$d/.claude/.gate-state"
 run_guard "$d"; r2=$rc
+echo 'digest 3' > "$d/.claude/.gate-state"
 run_guard "$d"; r3=$rc; o3=$out
 run_guard "$d"; r4=$rc
 [ "$r1$r2" = "22" ] && ok "the first two identical blocks block" || no "got rc $r1,$r2"

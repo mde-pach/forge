@@ -81,10 +81,16 @@ PROTECTED = (
 # review of the review, forever. The release counter is exempt for the same
 # reason with a sharper edge: it changes on every blocked attempt, so counting
 # it would give each block a fresh fingerprint and the release could never
-# reach three - the valve would be sealed by its own bookkeeping. (It is also
-# git-ignored here, but a project using this plugin without that line must not
-# inherit a sealed valve.)
-EXEMPT = (".claude/reviews/", ".claude/.guard-state")
+# reach three - the valve would be sealed by its own bookkeeping. The gate's
+# counter (.gate-state) is the same file one mechanism over, written in the
+# same Stop cycle, and was caught missing from this list by review - sealed
+# valve, second edition. (Both are also git-ignored here, but a project using
+# this plugin without those lines must not inherit a sealed valve.)
+#
+# What this cannot see: .git/info/exclude, core.excludesFile and
+# `git update-index --assume-unchanged` all hide files from `git status`, so
+# protecting .gitignore closes the committed door, not the local ones.
+EXEMPT = (".claude/reviews/", ".claude/.guard-state", ".claude/.gate-state")
 
 REVIEW_DIR = ".claude/reviews"
 
@@ -129,7 +135,13 @@ def changed(root: Path) -> list[str]:
             # .claude/settings.json is invisible - which is exactly how a hook or
             # a settings file first appears. The guard saw edits to existing
             # protected files and was blind to every new one.
-            ["git", "status", "--porcelain", "--untracked-files=all"],
+            #
+            # -z is equally load-bearing: without it, core.quotePath C-quotes
+            # any path with a non-ASCII byte, so `.claude/hooks/evíl.py` came
+            # back as `".claude/hooks/ev\303\255l.py"` - leading quote, no
+            # prefix match, guard silently passes. One accented character was
+            # a full bypass. NUL-separated output is never quoted.
+            ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
             cwd=root,
             capture_output=True,
             text=True,
@@ -139,10 +151,16 @@ def changed(root: Path) -> list[str]:
     except (subprocess.SubprocessError, OSError):
         return []
     out = []
-    for line in r.stdout.splitlines():
-        path = line[3:].strip()
-        if " -> " in path:
-            path = path.split(" -> ")[-1]
+    entries = r.stdout.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        status, path = entry[:2], entry[3:]
+        if status[:1] in ("R", "C"):
+            i += 1  # in -z format the SOURCE path follows as its own entry
         if path.startswith(EXEMPT):
             continue
         # "/.claude/" catches every embedded Claude config dir - the stacks
@@ -157,11 +175,14 @@ def fingerprint(root: Path, files: list[str]) -> str:
     """Identifies the exact content under review, so a review cannot outlive it."""
     h = hashlib.sha256()
     for f in files:
-        h.update(f.encode())
+        # NULs delimit name from content and entry from entry: concatenation
+        # without them lets distinct (name, content) splits hash identically.
+        h.update(f.encode() + b"\0")
         try:
             h.update((root / f).read_bytes())
         except OSError:
             h.update(b"<missing>")
+        h.update(b"\0")
     return h.hexdigest()[:16]
 
 
@@ -219,8 +240,8 @@ def main() -> int:
             json.dumps(
                 {
                     "systemMessage": (
-                        "forge-guard released after "
-                        f"{RELEASE_AFTER} identical blocks to avoid a loop - the "
+                        "forge-guard released on identical block attempt "
+                        f"{RELEASE_AFTER} to avoid a loop - the "
                         "protected changes are NOT reviewed, and the guard re-arms "
                         "on the next turn."
                     )

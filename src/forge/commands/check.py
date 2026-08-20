@@ -274,8 +274,12 @@ def run(args: Sequence[str] = ()) -> int:
     # path ran the monitor's verifier and nothing noticed the guard had none.
     verifiers = sorted((ROOT / "plugins").glob("*/verify.sh"))
     if not shutil.which("bash"):
+        # Fail, and run nothing: the loop below would raise FileNotFoundError
+        # mid-report. Review caught this refactor keeping the message and
+        # losing the pre-change guard around the execution.
         failures += 1
         print("  FAIL  bash is missing; no plugin verifier can run")
+        verifiers = []
     elif not verifiers:
         failures += 1
         print("  FAIL  no plugin ships a verifier")

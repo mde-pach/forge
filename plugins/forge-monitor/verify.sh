@@ -43,10 +43,16 @@ rc=0; FORGE_MONITOR_STATE=/proc/nowhere bash "$MON_DIR/hooks/emit.sh" Stop </dev
 # Stop events were found in a production event log, one per full check run,
 # and a verify-1 row can reach the real dashboard. A test that leaks into the
 # state it exists to protect is the exact inversion of its job.
-rc=0; printf '%s' "$EV" | env -i PATH=/usr/bin:/bin FORGE_MONITOR_STATE="$FORGE_MONITOR_STATE" \
+#
+# The landing assertion uses a FRESH directory, used by nothing else: the
+# first version asserted on the shared harness dir, which earlier sections had
+# already written to, so dropping the variable from the env -i line - the
+# exact original bug - still passed on the leftover file. Review caught it.
+STRIP="$TMP/stripped-state"
+rc=0; printf '%s' "$EV" | env -i PATH=/usr/bin:/bin FORGE_MONITOR_STATE="$STRIP" \
   bash "$MON_DIR/hooks/emit.sh" Stop >/dev/null 2>&1 || rc=$?
 [ "$rc" = 0 ] && ok "a stripped environment exits 0" || no "stripped environment exited $rc"
-[ -f "$FORGE_MONITOR_STATE/events-Stop.ndjson" ] \
+[ -f "$STRIP/events-Stop.ndjson" ] \
   && ok "the stripped-environment event landed in the harness state dir, not the real one" \
   || no "the stripped-environment event did not reach \$FORGE_MONITOR_STATE - it went somewhere real"
 
@@ -106,14 +112,29 @@ st=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions
 [ "$st" = working ] && ok "a hook-blocked Stop records the session as working, not idle" \
                     || no "hook-blocked Stop recorded state '$st'"
 # An unchanged record still publishes eventually: the heartbeat keeps the
-# store's last_seen honest without a change to ride on.
-python3 - "$FORGE_MONITOR_STATE/sessions/c-1.json" <<'PYHB'
+# store's last_seen honest without a change to ride on. The record's stored
+# hash is first synced to its CURRENT content - the first version of this
+# proof skipped that, so the publish it observed fired through the
+# changed-hash clause and the proof passed with the heartbeat deleted.
+# Review caught it; this version holds first, then heartbeats.
+sync_hash() {  # $1: seconds to backdate publish_attempted_at by
+  python3 - "$MON_DIR" "$FORGE_MONITOR_STATE/sessions/c-1.json" "$1" <<'PYHB'
 import json, sys
 from datetime import datetime, timezone, timedelta
-p = sys.argv[1]; r = json.load(open(p))
-r["publish_attempted_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1200)).strftime("%Y-%m-%dT%H:%M:%SZ")
+sys.path.insert(0, sys.argv[1]); import record
+p = sys.argv[2]; r = json.load(open(p))
+r["publish_attempted_hash"] = record.content_hash(r)
+r["publish_attempted_at"] = (
+    datetime.now(timezone.utc) - timedelta(seconds=int(sys.argv[3]))
+).strftime("%Y-%m-%dT%H:%M:%SZ")
 open(p, "w").write(json.dumps(r))
 PYHB
+}
+sync_hash 0
+f=$(r ',"stop_hook_active":true' Stop)
+[ "$f" = hold ] && ok "an unchanged record inside the quiet interval is held" \
+                || no "unchanged record said '$f', expected hold"
+sync_hash 1200
 f=$(r ',"stop_hook_active":true' Stop)
 [ "$f" = publish ] && ok "an unchanged record heartbeats after the quiet interval" \
                    || no "heartbeat said '$f'"
