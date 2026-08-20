@@ -141,11 +141,22 @@ if [ "$installed" = 1 ]; then
   fi
 fi
 
+# Say what was enabled. This block was written silently for four days: a
+# scaffolded project opted itself into publishing session records - project
+# name, working directory, state - and nothing in the output mentioned it. The
+# default is not the defect; the silence is. It is also committed, so it applies
+# to anyone who opens the repository, which is what makes cloud sessions work
+# and what makes sharing the repository a decision rather than an accident.
 cat <<EOF
 scaffolded $stack -> $target
   project  : $project
   module   : $module
   verifier : $verify_result
+  plugins  : forge-monitor (session records -> your store), forge-guard (blocks
+             unreviewed changes to hooks, settings, manifests and CI).
+             Enabled in $target/.claude/settings.json, which is COMMITTED - so
+             it applies to anyone who opens this repository. Remove the
+             enabledPlugins block to opt out.
 next:
 EOF
 case "$stack" in

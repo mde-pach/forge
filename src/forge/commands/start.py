@@ -12,6 +12,14 @@ a separate command you had to already know about to run when something looked
 wrong; a readiness report you have to ask for is a report nobody reads. It runs
 on the way up now, every time, and costs one conditional API request.
 
+It also *writes* the config rather than telling you to. The setup document used
+to have you locate a platform-specific state directory with a Python one-liner
+and hand-author a five-key JSON file - of which four keys were restatements of
+values already defaulted in the code. The one machine-specific fact is the store
+repository, and `gh` already knows your username. A readiness report that
+identifies a missing config and then hands you a document to read is the same
+defect `doctor` was: it diagnoses, and gives the work back.
+
 The readiness report never blocks. A view that shows only local records is
 worth having, so a missing token degrades the page rather than refusing to
 start - the opposite of forge's gates, deliberately, because this is a window
@@ -22,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -55,10 +64,62 @@ def _load(filename: str) -> ModuleType:
     return mod
 
 
+def _gh_user() -> str | None:
+    """Your login, from the credential you already authenticated with."""
+    if not shutil.which("gh"):
+        return None
+    r = subprocess.run(
+        ["gh", "api", "user", "--jq", ".login"], capture_output=True, text=True, check=False
+    )
+    return r.stdout.strip() or None if r.returncode == 0 else None
+
+
+def _write_store(state: Path, repo: str) -> None:
+    """Merge, never overwrite: anything else in the file is the owner's."""
+    path = state / "config.json"
+    try:
+        cfg = json.loads(path.read_text())
+    except (OSError, ValueError):
+        cfg = {}
+    cfg.setdefault("store", {})["repo"] = repo
+    path.write_text(json.dumps(cfg, indent=2) + "\n")
+    print(f"  wrote      {path}")
+
+
+def _ensure_store(serve: ModuleType, state: Path, requested: str | None) -> None:
+    """Make sure a store is configured, asking only when there is someone to ask.
+
+    Only `store.repo` is written. `branch`, `min_publish_seconds`, `stale_minutes`
+    and `forget_hours` all have defaults in the code that reads them, so writing
+    them here would be four lines of config restating four constants - and a
+    config key that duplicates a default is a second place for the value to live.
+    """
+    if requested:
+        _write_store(state, requested)
+        return
+    if (serve.load_config(state).get("store") or {}).get("repo"):
+        return
+
+    user = _gh_user()
+    if not user or not sys.stdin.isatty():
+        # Nothing to derive from, or nobody to ask. Stay quiet: the readiness
+        # report below owns the "not configured" line and says what to do about
+        # it, and two functions reporting the same state is how a message ends
+        # up printed twice with different wording.
+        return
+
+    default = f"{user}/forge-state"
+    try:
+        answer = input(f"  store      repository to publish to [{default}]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    _write_store(state, answer or default)
+
+
 def _readiness(serve: ModuleType, state: Path) -> None:
     """What the view will be able to show, and the reason when the answer is
     'less than you expect'. Prints; never raises, never exits."""
-    print("readiness")
     local = len(list((state / "sessions").glob("*.json"))) if (state / "sessions").is_dir() else 0
     print(f"  state      {state} ({local} local record(s))")
 
@@ -66,8 +127,13 @@ def _readiness(serve: ModuleType, state: Path) -> None:
     repo = (cfg.get("store") or {}).get("repo")
     branch = (cfg.get("store") or {}).get("branch", "main")
     if not repo:
-        print("  store      not configured - this machine's sessions only.")
-        print("             see docs/how-to/monitor.md to publish them")
+        user = _gh_user()
+        print("  store      not configured - this machine's sessions only")
+        if user:
+            print(f"             to publish:  uv run forge start --store {user}/forge-state")
+        else:
+            print("             `gh` cannot say who you are. Run `gh auth login`, or pass")
+            print("             `uv run forge start --store <owner>/<repo>`")
         return
 
     tok = serve.find_token(cfg)
@@ -83,7 +149,15 @@ def _readiness(serve: ModuleType, state: Path) -> None:
     if status == 200 and isinstance(listing, list):
         print(f"  store      {repo}@{branch} - {len(listing)} session record(s)")
     elif status == 404:
-        print(f"  store      {repo}@{branch} reachable, no sessions published yet")
+        # A 404 on the contents path means one of two very different things, and
+        # reporting both as healthy is how a missing repository looked fine.
+        repo_status, _, _ = serve.api(f"https://api.github.com/repos/{repo}", tok)
+        if repo_status == 404:
+            print(f"  store      {repo} does not exist. Create it - it holds your project")
+            print("             names and working directories, so keep it private:")
+            print(f"               gh repo create {repo} --private")
+        else:
+            print(f"  store      {repo}@{branch} reachable, no sessions published yet")
     elif status == 403:
         print(f"  store      {repo} refused the token (403). Not retrying with a broader scope.")
         print("             the token needs `contents` on that repository, nothing more")
@@ -123,6 +197,9 @@ def run(args: Sequence[str] = ()) -> int:
     )
     ap.add_argument("--state", default=None, help="override the state directory")
     ap.add_argument(
+        "--store", default=None, metavar="OWNER/REPO", help="set the session store and remember it"
+    )
+    ap.add_argument(
         "--local-only",
         action="store_true",
         help="do not expose on the tailnet even if it is set up",
@@ -134,6 +211,8 @@ def run(args: Sequence[str] = ()) -> int:
     state = Path(opts.state) if opts.state else paths.state_dir()
     state.mkdir(parents=True, exist_ok=True)
 
+    print("readiness")
+    _ensure_store(serve, state, opts.store)
     _readiness(serve, state)
 
     print("\nreach")

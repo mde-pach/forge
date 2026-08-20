@@ -1,8 +1,8 @@
 # Set up the session monitor
 
-Follow this once. It takes about five minutes and touches three things: a
-private repository, a config file, and one block in each project you want
-watched. Nothing is installed globally.
+Follow this once. It takes about five minutes and touches two things: a private
+repository, and one block in each project you want watched. Nothing is installed
+globally, and nothing is hand-authored — `forge start` writes its own config.
 
 If a step doesn't work, that is a bug in this document or in the monitor, not
 something to work around. Note where it broke.
@@ -12,7 +12,7 @@ something to work around. Note where it broke.
 - **Claude Code**, and **Python 3.9 or newer** (`python3 --version`)
 - **[GitHub CLI](https://cli.github.com)**, for the credential. No personal
   access token is created or stored.
-- **[Tailscale](https://tailscale.com/download)**, only for step 5 — reaching
+- **[Tailscale](https://tailscale.com/download)**, only for step 4 — reaching
   the dashboard from your phone.
 
 Linux, macOS and Windows are all supported. On Windows, run the commands in Git
@@ -38,61 +38,54 @@ gh repo create <your-username>/forge-state --private
 
 `gh auth logout` revokes this at any time.
 
-## 3 · Point the monitor at it
+## 3 · Enable it in a project
 
-Create `config.json` in the monitor's state directory. That directory differs by
-platform — this prints yours:
+**A project forge scaffolded already has this** — `scaffold.sh` writes it and
+tells you it did. Skip to step 4.
 
-```bash
-python3 plugins/forge-monitor/paths.py 2>/dev/null || \
-python3 -c "import sys;sys.path.insert(0,'plugins/forge-monitor');import paths;print(paths.state_dir())"
-```
-
-Typically `~/.local/state/forge-monitor` on Linux,
-`~/Library/Application Support/forge-monitor` on macOS,
-`%LOCALAPPDATA%\forge-monitor` on Windows.
-
-Put this in `config.json` there:
-
-```json
-{
-  "store": { "repo": "<your-username>/forge-state", "branch": "main" },
-  "min_publish_seconds": 120,
-  "stale_minutes": 45,
-  "forget_hours": 72
-}
-```
-
-The three numbers are: how long to wait between routine updates, how long a
-session may go quiet before it is flagged, and when finished sessions are
-forgotten. The defaults are guesses — change them once you have seen real data.
-
-## 4 · Enable it in a project
-
-In any project you want watched, commit this to `.claude/settings.json`:
+For an **existing** project you are retrofitting, commit this to
+`.claude/settings.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
     "forge": { "source": { "source": "github", "repo": "mde-pach/forge" } }
   },
-  "enabledPlugins": { "forge-monitor@forge": true }
+  "enabledPlugins": {
+    "forge-monitor@forge": true,
+    "forge-guard@forge": true
+  }
 }
 ```
 
-Because it is in the repository rather than your machine, it follows the project
-— including into [cloud sessions](/how-to/start-a-project), which read the repo
-and never your laptop.
+`forge-monitor` records the session; `forge-guard` refuses to end a turn that
+changed hooks, settings, manifests or CI without an independent review. Drop
+either line to leave that one out.
 
-Start a session in that project, say anything, and let it finish a turn.
+This file is **committed**, so it applies to anyone who opens the repository —
+which is what lets a cloud session inherit it, and what makes sharing the
+repository a decision rather than an accident.
 
-## 5 · Look at it
+## 4 · Start it
 
 ```bash
-uv run forge start
+uv run forge start --store <your-username>/forge-state
 ```
 
-That is the whole thing. It prints what it can see before serving anything:
+That is the whole thing. `--store` is needed once: it writes the repository into
+forge's state directory and prints the path it wrote to. After that, plain
+`uv run forge start`. Run it with no store configured and a terminal attached
+and it derives your username from `gh` and offers `<you>/forge-state` as the
+default, so the flag is really only for scripts.
+
+Only the repository is stored. The branch, how long to wait between routine
+updates, how long a session may go quiet before it is flagged and when finished
+sessions are forgotten all have defaults in the code that reads them — writing
+them into a config file would be four keys restating four constants, which is
+four more places for the value to disagree with itself. To change one, add
+`branch`, `min_publish_seconds`, `stale_minutes` or `forget_hours` to that file.
+
+It prints what it can see before serving anything:
 
 ```
 readiness

@@ -37,6 +37,7 @@
     }
   },
   "enabledPlugins": {
-    "forge-monitor@forge": true
+    "forge-monitor@forge": true,
+    "forge-guard@forge": true
   }
 }
