@@ -107,5 +107,38 @@ done
 [ "$all" = 0 ] && ok "FORGE_GATE_NO_RELEASE blocks on every attempt, forever" \
                || no "the valve released with FORGE_GATE_NO_RELEASE set"
 
+echo "6. protection is the default; the exposed list is short and deliberate"
+d=$(mk_repo scope)
+mkdir -p "$d/docs/how-to"; echo prose > "$d/docs/how-to/thing.md"; echo readme > "$d/README.md"
+run_guard "$d"
+[ "$rc" = 0 ] && ok "prose (docs/, README.md) changes freely" || no "prose blocked (rc=$rc)"
+mkdir -p "$d/src/forge/checks"; echo 'X = 1' > "$d/src/forge/checks/planted.py"
+run_guard "$d"
+[ "$rc" = 2 ] && ok "a check edit blocks - the exact hole a session once used, unreviewed" \
+              || no "src/forge/checks/ change passed (rc=$rc)"
+rm -rf "$d/src"
+mkdir -p "$d/stacks/python/template/.claude/hooks"; echo 'exit 0' > "$d/stacks/python/template/.claude/hooks/planted.sh"
+run_guard "$d"
+[ "$rc" = 2 ] && ok "a template's .claude/ blocks - scaffolds ship it into every project" \
+              || no "embedded .claude/ change passed (rc=$rc)"
+rm -rf "$d/stacks"
+echo 'ignored/' > "$d/.gitignore"
+run_guard "$d"
+[ "$rc" = 2 ] && ok ".gitignore blocks - it can hide files from every status-based check" \
+              || no ".gitignore change passed (rc=$rc)"
+rm -f "$d/.gitignore"
+
+echo "7. recording the review does not demand a review of the review"
+d=$(mk_repo regress)
+mkdir -p "$d/.claude"; echo '{}' > "$d/.claude/settings.json"
+run_guard "$d"
+fp=$(fp_of "$d")
+mkdir -p "$d/.claude/reviews"
+printf '# Review\n\n## Prompt\nReview the diff.\n\nFine.\n' > "$d/.claude/reviews/$fp.md"
+run_guard "$d"
+[ "$rc" = 0 ] \
+  && ok "the review file, though under .claude/, is exempt - no infinite regress" \
+  || no "writing the review re-triggered the guard (rc=$rc)"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

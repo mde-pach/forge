@@ -53,6 +53,22 @@ def _proofs() -> list[tuple[str, bool, str]]:
         )
     )
 
+    # The inverse, for the derived-filename exemptions: a review file is looked
+    # up by recomputing a content hash, a fixture by assembling the event name,
+    # so neither can ever be referenced by path - the exemption says that is
+    # fine, and this proves the exemption actually exempts. It exists because
+    # the .claude/reviews/ entry was added mid-session, unreviewed, with no
+    # proof at all - the change was right and the way it happened was wrong.
+    for exempt in (".claude/reviews/__planted" + ".md", "plugins/forge-monitor/fixtures/events-__Planted" + ".json"):
+        found, _ = orphans.find([*orphans.repo_files(), exempt])
+        out.append(
+            (
+                f"a derived-name file under {exempt.rsplit('/', 1)[0]}/ is not called an orphan",
+                exempt not in found,
+                "the exemption for filenames that are computed, never written, must hold",
+            )
+        )
+
     original = reg.REGISTRY
 
     def _rejects(entry: Entry) -> bool:

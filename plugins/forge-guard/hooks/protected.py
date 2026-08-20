@@ -2,10 +2,12 @@
 """
 Nothing changes the rules without a second pair of eyes.
 
-There is a small set of files that decide how everything else behaves — hooks,
-settings, plugin manifests, CI, context files. Editing those is how a gate gets
-quietly disabled, and it is exactly where the session doing the editing is least
-able to judge itself.
+Most of this repo decides how everything else behaves — hooks, settings,
+checks, the registry, the kernel, the templates a scaffold ships. Editing any
+of it is how a gate gets quietly disabled, and it is exactly where the session
+doing the editing is least able to judge itself. So protection is the default
+and exposure is the exception: what a session may change without review is the
+short list (prose, mostly), not the other way round.
 
 So: touch one of them, and the turn cannot end until an independent review of
 that change has been recorded. Run on Stop, exit 2, which is the one exit code
@@ -49,21 +51,40 @@ import subprocess
 import sys
 from pathlib import Path
 
+# An allowlist, inverted: everything rule-bearing is protected, and what is
+# left exposed is a deliberate, short list (docs/, README.md, FRICTIONS.md,
+# lockfiles). This used to be the other way round - a list of special files -
+# and the gap was exploited within a day of mattering: a session re-scoped a
+# check in src/forge/checks/ mid-run, unreviewed, ninety seconds after saying
+# it wouldn't, because adding an icon needed a review and rewriting a checker
+# needed none. The checks, the registry, the kernel, the contract, the
+# templates a scaffold ships (their .claude/ dirs carry the very gate
+# fragments this repo sources), and .gitignore - which can HIDE a file from
+# every check built on `git status` - all decide behaviour, so they are all in.
 PROTECTED = (
-    ".claude/settings.json",
-    ".claude/hooks/",
-    # A capability is what forge DOES when you ask it for something - closer to a
-    # rule than to code, and the one thing here a session could quietly rewrite
-    # mid-task to change its own instructions.
-    ".claude/skills/",
+    ".claude/",
     ".claude-plugin/",
     "plugins/",
-    ".github/workflows/",
+    ".github/",
     "CLAUDE.md",
-    ".claude/rules/",
     "pyproject.toml",
     "package.json",
+    ".gitignore",
+    "src/forge/",
+    "kernel/",
+    "contract/",
+    "stacks/",
 )
+
+# Recording a review writes under .claude/, which is protected - unexempted,
+# the act of satisfying the guard would change the fingerprint and demand a
+# review of the review, forever. The release counter is exempt for the same
+# reason with a sharper edge: it changes on every blocked attempt, so counting
+# it would give each block a fresh fingerprint and the release could never
+# reach three - the valve would be sealed by its own bookkeeping. (It is also
+# git-ignored here, but a project using this plugin without that line must not
+# inherit a sealed valve.)
+EXEMPT = (".claude/reviews/", ".claude/.guard-state")
 
 REVIEW_DIR = ".claude/reviews"
 
@@ -122,7 +143,12 @@ def changed(root: Path) -> list[str]:
         path = line[3:].strip()
         if " -> " in path:
             path = path.split(" -> ")[-1]
-        if any(path == p or path.startswith(p) for p in PROTECTED):
+        if path.startswith(EXEMPT):
+            continue
+        # "/.claude/" catches every embedded Claude config dir - the stacks
+        # templates' hooks and settings ship into scaffolded projects, and the
+        # root .claude/ is covered by the prefix list.
+        if "/.claude/" in path or any(path == p or path.startswith(p) for p in PROTECTED):
             out.append(path)
     return sorted(out)
 
