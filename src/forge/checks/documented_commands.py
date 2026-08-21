@@ -1,13 +1,4 @@
-"""
-Every command a document tells you to run must exist.
-
-The stack README said `npm run typecheck` after the scripts had been rewritten
-and the package manager changed. Nothing noticed, because prose has no compiler.
-
-This is the smallest useful form of documentation-code agreement: not verifying
-what a document *says*, which nobody has made work, but verifying that the
-commands it tells a reader to type are declared somewhere that runs them.
-"""
+"""Every `uv run X` / `bun run X` a stack README or CLAUDE.md mentions is a declared script."""
 
 from __future__ import annotations
 
@@ -18,14 +9,14 @@ from pathlib import Path
 
 from forge.registry import ROOT
 
-# (manifest, how to read its declared commands, the prefix docs use to invoke)
+# (template dir, manifest, the runner prefix its docs use)
 STACKS = (
     ("stacks/python/template", "pyproject.toml", "uv run"),
     ("stacks/nextjs/template", "package.json", "bun run"),
 )
 DOCS = ("README.md", "CLAUDE.md")
 
-# Commands the runner provides itself, which are not declared per project.
+# Provided by the runner itself, never declared per project.
 BUILTIN = {
     "uv run": {"pytest", "ruff", "mypy", "python", "forge"},
     "bun run": {"dev", "build", "start", "test"},
@@ -58,7 +49,6 @@ def check() -> list[str]:
                         f"{base}/{doc} says `{prefix} {cmd}`, "
                         f"which {manifest_name} does not declare"
                     )
-        # And the reverse direction, for the runner the docs use.
         other = "npm run" if prefix == "bun run" else "poetry run"
         if any(other in (root / d).read_text() for d in DOCS if (root / d).is_file()):
             errors.append(f"{base} documents `{other}` but the project uses `{prefix}`")

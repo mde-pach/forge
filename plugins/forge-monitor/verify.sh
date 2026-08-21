@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# forge-monitor verifier.
-#
-# The design claims are: a session cannot observe this layer, it can never block
-# a turn, the unit is the session rather than the machine, and nothing has to be
-# running for the state to stay true. A claim is worth exactly as much as the
-# test that fails when it stops holding.
+# forge-monitor verifier. Claims: a session cannot observe this layer, it can
+# never block a turn, the unit is the session, and nothing has to be running
+# for the state to stay true.
 set -uo pipefail
 
 MON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,11 +10,6 @@ export FORGE_MONITOR_STATE="$TMP/state"
 pass=0; fail=0; skip=0
 ok() { printf '  ok    %s\n' "$1"; pass=$((pass+1)); }
 no() { printf '  FAIL  %s\n' "$1"; fail=$((fail+1)); }
-# A check that cannot run must SAY so. This one silently vanished when `claude`
-# was not on PATH, so the summary read 37 locally and 36 in CI with no
-# explanation - a count that differs by environment without naming the reason
-# is a number nobody can act on, and one check short of the local run is exactly
-# how a check that tests nothing hides.
 skipped() { printf '  skip  %s (%s)\n' "$1" "$2"; skip=$((skip+1)); }
 
 EV='{"session_id":"verify-1","cwd":"/tmp/proj","permission_mode":"bypassPermissions"}'
@@ -38,16 +30,8 @@ for c in "garbage:not json" "empty:"; do
 done
 rc=0; FORGE_MONITOR_STATE=/proc/nowhere bash "$MON_DIR/hooks/emit.sh" Stop </dev/null >/dev/null 2>&1 || rc=$?
 [ "$rc" = 0 ] && ok "unwritable state dir exits 0" || no "unwritable state dir exited $rc"
-# FORGE_MONITOR_STATE is passed through the stripped environment on purpose:
-# without it, this test's payload lands in the REAL state dir - eight verify-1
-# Stop events were found in a production event log, one per full check run,
-# and a verify-1 row can reach the real dashboard. A test that leaks into the
-# state it exists to protect is the exact inversion of its job.
-#
-# The landing assertion uses a FRESH directory, used by nothing else: the
-# first version asserted on the shared harness dir, which earlier sections had
-# already written to, so dropping the variable from the env -i line - the
-# exact original bug - still passed on the leftover file. Review caught it.
+# FORGE_MONITOR_STATE rides through the stripped environment so the payload
+# lands in a fresh harness dir, never the real state dir.
 STRIP="$TMP/stripped-state"
 rc=0; printf '%s' "$EV" | env -i PATH=/usr/bin:/bin FORGE_MONITOR_STATE="$STRIP" \
   bash "$MON_DIR/hooks/emit.sh" Stop >/dev/null 2>&1 || rc=$?
@@ -100,23 +84,17 @@ a=$(r '' SessionStart); b=$(r '' Stop); c=$(r ',"notification_type":"agent_needs
 [ "$a" = publish ] && ok "a session starting publishes" || no "SessionStart said '$a'"
 [ "$b" = hold ]    && ok "a routine turn end is held back" || no "Stop said '$b', expected hold"
 [ "$c" = publish ] && ok "an attention event publishes immediately" || no "Notification said '$c'"
-# A demand already published does not publish again just because the event
-# repeats - the first monitored session put seven commits in the store that
-# differed only in last_seen. Content, not cadence.
+# A repeated event with unchanged content does not publish again.
 d=$(r ',"notification_type":"agent_needs_input"' Notification)
 [ "$d" = hold ] && ok "the same demand repeated is held - no commit spam" \
                 || no "a repeated identical demand said '$d'"
 # A Stop that a Stop hook forced to continue is work, not rest.
-e=$(r ',"stop_hook_active":true' Stop)
+_=$(r ',"stop_hook_active":true' Stop)
 st=$(python3 -c "import json;print(json.load(open('$FORGE_MONITOR_STATE/sessions/c-1.json'))['state'])")
 [ "$st" = working ] && ok "a hook-blocked Stop records the session as working, not idle" \
                     || no "hook-blocked Stop recorded state '$st'"
-# An unchanged record still publishes eventually: the heartbeat keeps the
-# store's last_seen honest without a change to ride on. The record's stored
-# hash is first synced to its CURRENT content - the first version of this
-# proof skipped that, so the publish it observed fired through the
-# changed-hash clause and the proof passed with the heartbeat deleted.
-# Review caught it; this version holds first, then heartbeats.
+# An unchanged record still publishes as a heartbeat. The stored hash is synced
+# to the current content first, so the publish observed is the heartbeat's.
 sync_hash() {  # $1: seconds to backdate publish_attempted_at by
   python3 - "$MON_DIR" "$FORGE_MONITOR_STATE/sessions/c-1.json" "$1" <<'PYHB'
 import json, sys
@@ -193,11 +171,7 @@ echo "$out" | grep -q '"source": "local"' \
   && ok "with no store configured it still shows this machine" || no "unexpected source: $out"
 
 # A configured but unreachable store must not blank the page. Stubbed at the
-# _api seam, not exercised over the real network: the network version of this
-# test passed for months in environments with no token (the code under test
-# never ran) and failed only on the one machine with a real token - where it
-# found a real bug, a dead store rendering as a live empty dashboard. A test
-# whose subject depends on who runs it is not a test.
+# _api seam so the test does not depend on a token or the network.
 snap_stub() {  # $1 = state dir, $2 = sessions-dir status, $3 = repo-probe status
   python3 - "$MON_DIR" "$1" "$2" "$3" <<'PYSNAP'
 import json, sys, importlib.util, pathlib
@@ -241,10 +215,7 @@ print(','.join(publish.pending(Path('$pend'))))")
                   || no "expected pending=p1, got '$got'"
 rc=0; FORGE_MONITOR_STATE="$pend" python3 "$MON_DIR/publish.py" --flush >/dev/null 2>&1 || rc=$?
 [ "$rc" = 0 ] && ok "publishing with no store or token exits 0 silently" || no "publish exited $rc"
-# The store never receives this machine's bookkeeping - in particular not
-# published_at, which is stamped AFTER upload and so was always one publish
-# stale in the store copy, making every published record declare itself
-# unpublished forever by pending()'s own rule.
+# The store never receives this machine's bookkeeping.
 kept=$(python3 -c "
 import sys; sys.path.insert(0, '$MON_DIR'); import publish
 r = {'session_id':'u1','state':'ended','last_seen':'2026-01-02T00:00:00Z',
@@ -257,10 +228,7 @@ print(','.join(sorted(publish.upload_payload(r))))")
 
 echo "8. nothing is installed at user scope, and nothing is session-facing"
 US="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-# Only hand-wired HOOKS are the violation. The plugin's own name appearing in
-# enabledPlugins IS the sanctioned mechanism ("ship as a plugin" satisfied,
-# literally) - the old grep flagged exactly that on the first machine where
-# someone installed the plugin properly, which is a check failing its purpose.
+# Only hand-wired hooks are the violation; enabledPlugins is the sanctioned mechanism.
 wired=$(python3 - "$US" <<'PYUS'
 import json, sys
 try:
@@ -312,9 +280,7 @@ else
 fi
 bashism=$(grep -nE '\[\[|BASH_SOURCE|\$\{[A-Za-z_]+\/\/' "$MON_DIR/hooks/emit.sh" || true)
 [ -z "$bashism" ] && ok "the launcher contains no bashisms" || no "bashisms in the launcher: $bashism"
-# Parsed, not grepped: the previous version matched the comment explaining why
-# os.uname() is avoided, which is the same mistake as deciding on tool output
-# instead of exit codes.
+# Parsed, not grepped.
 if python3 - "$MON_DIR" <<'PYAST'
 import ast, pathlib, sys
 bad = []
@@ -346,15 +312,8 @@ case "$launch" in
 esac
 
 echo "11. a captured payload folds into the fields the record promises"
-# The fixtures are real hook payloads, sanitized (ids and paths replaced, field
-# names untouched - the field names ARE the fixture). They exist because the
-# first record ever published carried end_reason: null: record.py read a field
-# no payload has ever contained, and nothing compared the code to a payload.
-# This is that comparison. An event with no captured payload yet is a skip that
-# says so, not a silent pass. SessionStart earned its fixture on 2026-08-21:
-# it had never been observed to fire under the plugin-installed hook, and fired
-# on the first session to run the repo-level wiring - the open question closed
-# by the same change that made the payload catchable.
+# The fixtures are real hook payloads, sanitized; the field names are the
+# fixture. An event with no captured payload is a skip that says so.
 FIX="$MON_DIR/fixtures"
 fold_field() {  # $1 payload file, $2 event, $3 field -> value, or MISSING when null/absent
   FORGE_MONITOR_STATE="$TMP/fold-$(basename "$1" .json)" python3 - "$MON_DIR" "$1" "$2" "$3" <<'PYFOLD'
@@ -380,9 +339,7 @@ for spec in "SessionEnd:end_reason" "Stop:last_message" "Notification:attention_
     skipped "$ev payload populates $field" "no captured payload yet"
   fi
 done
-# The break this check must notice: the same payload with its load-bearing
-# field renamed must fail. Assembled at run time, not committed - a fixture
-# whose job is to be wrong would be a file waiting to be mistaken for a shape.
+# Negative case: the same payload with its load-bearing field renamed must fail.
 python3 -c "
 import json
 p = json.load(open('$FIX/events-SessionEnd.json'))

@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""
-The hook body. Everything the monitor does inside a session happens here.
-
-Written in Python, not shell, for one reason: it has to work on Linux, macOS and
-Windows. The shell version used `timeout`, which macOS does not ship, and
-assumed a bash newer than the 3.2 macOS has carried since 2007. Python is
-already required by the rest of the plugin, so this removes a dependency rather
-than adding one.
-
-THE CONTRACT, in order of importance:
-
-  1. It writes NOTHING to stdout, ever. Claude Code shows a hook's stdout to the
-     model on exactly three events (SessionStart, UserPromptSubmit,
-     UserPromptExpansion); printing nothing means no session can observe this
-     layer on any event.
-  2. It always exits 0. Exit 2 is a blocking error on several events. A gate
-     must fail closed; a monitor must fail open, because one that can stop a
-     turn eventually will, at the worst moment.
-  3. It bounds itself. A watchdog exits the process rather than letting a hung
-     network call linger.
-"""
+"""The monitor's hook body. Contract: writes nothing to stdout, always exits 0, bounded by a watchdog."""
 
 from __future__ import annotations
 
@@ -36,8 +16,7 @@ WATCHDOG_SECONDS = 90
 
 
 def watchdog() -> None:
-    """Hard ceiling. os._exit skips interpreter shutdown on purpose: this must
-    not raise, print, or run an atexit handler that might."""
+    """Hard ceiling; os._exit so that nothing can print or raise on the way out."""
     os._exit(0)
 
 
@@ -54,7 +33,7 @@ def read_payload() -> dict:
 
 
 def log_raw(state: Path, event: str, payload: dict) -> None:
-    """The audit trail, and the fixtures we will finally test against."""
+    """Append the raw payload to events-<Event>.ndjson."""
     try:
         state.mkdir(parents=True, exist_ok=True)
         f = state / f"events-{event}.ndjson"
@@ -85,9 +64,6 @@ def main() -> int:
 
     decision = record.handle(event, payload)
 
-    # A session starting is the moment to repair what nobody was watching: a
-    # machine that shut down mid-session fires no SessionEnd, so that record
-    # would claim to be running forever.
     if event == "SessionStart":
         import sweep
 

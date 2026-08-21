@@ -1,32 +1,29 @@
-# How to give Claude GitHub access for forge
+# Give Claude GitHub access
 
-## Primary: GitHub's official remote MCP server as a custom connector (one-time, all surfaces)
+## Custom connector (all surfaces, one-time)
 
-Durable, account-level, no tokens in chat. Once connected, every Claude surface (web, mobile, Cowork, Desktop) gets repo tools automatically. Verified working 2026-08-16.
+1. Create a GitHub OAuth App (Settings → Developer settings → OAuth Apps):
+   homepage `https://claude.ai`, callback `https://claude.ai/api/mcp/auth_callback`.
+   Copy the Client ID and a Client Secret.
+2. In claude.ai (browser, not the mobile app): Settings → Connectors → Add custom connector.
+   Name `GitHub`, URL `https://api.githubcopilot.com/mcp/x/all`. Use `/x/repos`
+   for contents only, or append `/readonly`. Paste the Client ID and Secret.
+3. Connect and authorise. Enable the connector in a session's connector settings if needed.
 
-1. **Create a GitHub OAuth App** (GitHub → Settings → Developer settings → OAuth Apps → New OAuth App). GitHub does not support automatic client registration, so Claude needs your own app:
-   - Homepage URL: `https://claude.ai`
-   - Authorization callback URL: `https://claude.ai/api/mcp/auth_callback` (exact — used by all Claude surfaces)
-   - Register, copy the Client ID, generate and copy a Client Secret.
-2. **Add the custom connector — from claude.ai in a browser, not the mobile app** (the mobile app can only browse the directory): claude.ai → Settings → Connectors → Add custom connector.
-   - Name: `GitHub` — URL: `https://api.githubcopilot.com/mcp/x/all`
-     (all toolsets — repos, actions, issues, PRs — needed by the repo-admin capability for workflow dispatch and run-watching; use `/x/repos` for a minimal contents-only grant, or append `/readonly` for read-only surfaces)
-   - Put the OAuth App's Client ID and Client Secret in the OAuth fields.
-3. Connect → GitHub authorization page → authorize.
-4. In a session, enable the connector in the chat's connector settings if it isn't already.
+Writes go through the API: `push_files` is one commit per call; a rename is
+`push_files` plus `delete_file`.
 
-Notes: writes go through GitHub's API (`push_files` = one commit per call), so sessions mirror their local git commits one by one — history stays meaningful. Renames need `push_files` + `delete_file` (two commits).
+## Fallback: per-session fine-grained token
 
-## Fallback: per-session fine-grained PAT (raw git push)
-
-1. Create the private repo on GitHub if it doesn't exist.
-2. Fine-grained token: repository access = only the forge repo; permissions = Contents: read/write; nothing else.
-3. Paste token + repo URL in chat. Claude then:
+1. Create the private repository.
+2. Token scope: that repository only, Contents read/write, nothing else.
+3. Paste token and repository URL in chat. Claude runs:
 
 ```
 git remote set-url origin https://x-access-token:<TOKEN>@github.com/<you>/forge.git
 git push -u origin main
-git remote set-url origin https://github.com/<you>/forge.git   # scrub token after push
+git remote set-url origin https://github.com/<you>/forge.git
 ```
 
-Rules (both methods): credentials never enter a committed file, a report, or a projection; on a 403, stop and say so — never retry with broader guesses.
+Credentials never enter a committed file, a report or a projection. On a 403,
+stop and say so; never retry with broader guesses.

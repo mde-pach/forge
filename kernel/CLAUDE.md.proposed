@@ -1,38 +1,3 @@
-<!--
-PROPOSAL — a base CLAUDE.md for ~/.claude/CLAUDE.md (user scope).
-
-Why this shape, from Anthropic's own documentation (Aug 2026):
-
-  · Memory files are CONCATENATED, broadest to most specific:
-    managed policy -> ~/.claude/CLAUDE.md -> ./CLAUDE.md -> ./CLAUDE.local.md.
-    Nothing overrides anything, so this file must hold only what is true in
-    EVERY project. Project-specific content belongs in the project file.
-      https://code.claude.com/docs/en/memory
-
-  · "Target under 200 lines per CLAUDE.md file. Longer files consume more
-    context and reduce adherence." And: "Bloated CLAUDE.md files cause Claude
-    to ignore your actual instructions!"
-      https://code.claude.com/docs/en/best-practices
-    This file is ~55 lines on purpose: it is concatenated with every project
-    file, so its cost is paid in every session, forever.
-
-  · CLAUDE.md is delivered as a USER MESSAGE after the system prompt, with
-    "no guarantee of strict compliance". So nothing that must not fail lives
-    here — that is what the hooks in a forge scaffold are for. This file
-    shapes judgment; it does not enforce.
-      https://code.claude.com/docs/en/memory
-
-  · After /compact, the project-root CLAUDE.md and UNSCOPED .claude/rules/*.md
-    are re-injected from disk. Rules with `paths:` frontmatter, and nested
-    subdirectory CLAUDE.md files, are LOST until a matching file is read again.
-    So anything load-bearing must never live in a path-scoped rule.
-      https://code.claude.com/docs/en/context-window
-
-  · AGENTS.md is not read. If a repo has one, import it: @AGENTS.md
-
-Test for every line below: "would removing this cause a mistake?"
-Delete the ones where the answer is no.
--->
 
 # Working agreement
 
@@ -76,6 +41,8 @@ Define coined shorthand the first time it is used, or do not coin it.
 ## Code
 
 Never invent an API. Read the signature, or search for it.
+
+Comments state invariants, never history or justification. One line, or none.
 
 Do not add dependencies, frameworks, or abstraction layers that were not asked
 for. Do not leave dead code, commented-out blocks, or `any` behind as a way

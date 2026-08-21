@@ -67,7 +67,7 @@ GET https://api.github.com/repos/<owner>/<repo>/actions/runs
 
 Public repos need no token for this and no extra connector toolset. Red CI on
 the first push means the scaffold's promise was not kept — report it and open a
-friction entry, do not retry blindly.
+friction in forge-state, do not retry blindly.
 
 ## 6 · What still needs a human, and why
 

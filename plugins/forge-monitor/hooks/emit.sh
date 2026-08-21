@@ -1,12 +1,5 @@
 #!/bin/sh
-# POSIX launcher. The only job is finding an interpreter, because Claude Code's
-# hook `command` is a fixed string and `python3` is not what Python is called
-# everywhere. Deliberately /bin/sh and free of bashisms: macOS ships bash 3.2
-# and Windows may have neither.
-#
-# If no Python is found this exits 0 and the monitor is simply off. That is the
-# correct failure for an observer - the alternative is breaking a turn on a
-# machine that was only ever missing an optional tool.
+# POSIX launcher: find an interpreter and run emit.py. No Python means the monitor is off, not the turn broken.
 CDPATH=''
 export CDPATH
 DIR=$(cd -- "$(dirname -- "$0")" && pwd)

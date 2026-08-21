@@ -1,17 +1,7 @@
 #!/usr/bin/env python3
-"""
-Tell the session what already exists, before it builds a second one.
+"""UserPromptSubmit hook: list the project's entry points and related files with the request.
 
-Runs on UserPromptSubmit, one of only three events whose stdout Claude Code adds
-to the model's context. That is the whole mechanism: at the moment you ask for
-something, the list of what is already here arrives with your request.
-
-Why this is worth a hook rather than a note in a document: measured on real
-AI-authored pull requests, agents produce 1.87x the redundancy of human ones and
-delete about a third as much code. Not because the model prefers duplication,
-but because what already exists is not in front of it. This puts it there.
-
-Silent unless it has something to say, and never blocks.
+Silent unless it has something to say; never blocks.
 """
 
 from __future__ import annotations
@@ -23,7 +13,6 @@ from pathlib import Path
 
 
 def registry_summary(root: Path) -> list[str]:
-    """The declared entry points of whatever this project is."""
     out: list[str] = []
 
     py = root / "pyproject.toml"
@@ -59,7 +48,7 @@ def existing_files(root: Path) -> list[str]:
 
 
 def relevant(prompt: str, files: list[str], limit: int = 12) -> list[str]:
-    """Files whose name shares a meaningful word with the request."""
+    """Files whose name shares a word of four or more letters with the request."""
     words = {
         w for w in "".join(c if c.isalnum() else " " for c in prompt.lower()).split() if len(w) > 3
     }
@@ -93,15 +82,12 @@ def main() -> int:
 
     lines = ["<what-already-exists>"]
     if entries:
-        lines.append(
-            "Declared entry points — everything runnable is one of these, "
-            "and adding a second way to do one of these jobs is a defect:"
-        )
+        lines.append("Declared entry points:")
         lines += [f"  {e}" for e in sorted(entries)]
     if matches:
-        lines.append("Existing files related to this request:")
+        lines.append("Related files:")
         lines += [f"  {m}" for m in matches]
-    lines.append("Prefer changing one of these to adding something beside it.")
+    lines.append("Change one of these rather than adding beside it.")
     lines.append("</what-already-exists>")
     print("\n".join(lines))
     return 0

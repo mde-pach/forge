@@ -1,11 +1,6 @@
-# uv writes .venv/.gitignore containing `*`, so this is belt and braces - but the
-# checks now list untracked files too, and relying on a tool to write an ignore
-# file inside the directory it creates is not a guarantee this repo makes.
 .venv/
 node_modules/
-# Ephemeral loop-release counters (gate.sh and forge-guard). They exist only
-# while a Stop hook is mid-argument with a session; ignoring them keeps the
-# orphan check from flagging machine state as a repo file.
+# loop-release counters written by the Stop hooks
 .claude/.gate-state
 .claude/.guard-state
 docs/generated/
@@ -14,3 +9,4 @@ docs/.vitepress/cache/
 .vercel/
 __pycache__/
 *.pyc
+.pytest_cache/

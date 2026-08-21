@@ -1,4 +1,4 @@
-"""Validate capability manifests against the contract."""
+"""Every capability manifest under .claude/skills/ matches contract/CONTRACT.md."""
 
 from __future__ import annotations
 
@@ -8,12 +8,7 @@ import yaml
 
 from forge.registry import ROOT
 
-# Capabilities are project skills of the forge checkout: Claude Code discovers
-# `.claude/skills/<name>/SKILL.md` by scanning, with no plugin, no marketplace
-# and no projection - and picks up edits inside a running session. One copy,
-# loaded from the working tree you are sitting in.
 SKILLS = ".claude/skills"
-
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 KEBAB = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 REQUIRED = ("name", "version", "need", "triggers", "context", "contract", "verifier")

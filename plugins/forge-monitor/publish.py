@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
-"""
-Publish session records to the store, over the GitHub API.
-
-There is no clone. Nothing here needs git's semantics: one session owns one
-path, so an update is a single PUT carrying that file's blob sha. That removes
-the working copy from every machine, the commit, the rebase-and-retry loop, and
-git itself from the hook path - while keeping the history, because every PUT is
-still a commit.
+"""Publish session records to the store over the GitHub contents API (one PUT per record, no clone).
 
     publish.py <session-id>   publish one record
     publish.py --flush        publish every record the store is behind on
 
-Never raises, never prints to stdout, always exits 0. It runs inside a hook.
+Never raises, never prints to stdout, always exits 0.
 """
 
 from __future__ import annotations
@@ -96,15 +89,7 @@ def write_record(path: Path, rec: dict) -> None:
 
 
 def upload_payload(rec: dict) -> dict:
-    """What the store receives: the record minus this machine's bookkeeping.
-
-    `store_sha` and `publish_attempted_at` were always local-only. So is
-    `published_at`: it is stamped locally AFTER a successful PUT, so a copy of
-    it in the upload is always one publish stale - the very first record in the
-    store carried published_at < last_seen and thereby declared itself
-    unpublished forever, by this file's own pending() rule. Only the machine
-    that publishes needs the stamp; the store gets none.
-    """
+    """The record minus this machine's bookkeeping (store_sha, publish_attempted_at, published_at)."""
     payload = dict(rec)
     payload.pop("store_sha", None)
     payload.pop("publish_attempted_at", None)
@@ -140,9 +125,7 @@ def publish_one(state: Path, cfg: dict, tok: str, sid: str) -> bool:
 
     status, resp, _ = call("PUT", url, tok, body)
 
-    # 409/422 mean our cached sha is stale - somebody (a re-clone, a manual
-    # edit) moved the file. Ask once what the sha is now, then retry. This is
-    # the only concurrency case that exists, because one session owns one path.
+    # 409/422: the cached sha is stale. Fetch the current one and retry once.
     if status in (409, 422):
         st2, cur, _ = call("GET", f"{url}?ref={branch}", tok)
         if st2 == 200 and cur.get("sha"):
@@ -163,12 +146,7 @@ def publish_one(state: Path, cfg: dict, tok: str, sid: str) -> bool:
 
 
 def pending(state: Path) -> list[str]:
-    """Records the store is behind on: never published, or changed since.
-
-    This is what makes retry a property rather than a special case - a push
-    that failed while offline is simply still pending, and the next event on
-    this machine flushes it.
-    """
+    """Records the store is behind on: never published, or changed since."""
     out = []
     d = state / "sessions"
     if not d.is_dir():

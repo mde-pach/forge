@@ -1,14 +1,4 @@
-"""
-Every declared command must actually exist.
-
-The registry declared `forge docs` for an hour before the module existed. The
-dispatcher imports handlers on demand, so the promise held right up until
-somebody tried to use it — which is the "declared but absent" divergence the
-architecture-erosion literature names, inside the very table meant to stop it.
-
-A registry that can promise something it does not have is a description, not a
-mechanism.
-"""
+"""Every declared command resolves to a callable."""
 
 from __future__ import annotations
 

@@ -34,12 +34,10 @@ jobs:
       - name: shell syntax + shellcheck (every .sh in the repo)
         run: |
           set -euo pipefail
-          # find, not globstar: `**` does not descend into dot-directories, so a
-          # glob would silently skip stacks/*/template/.claude/hooks/*.sh - the
-          # most important scripts in the repo.
+          # find, not globstar: `**` does not descend into dot-directories.
           mapfile -d '' files < <(find .claude stacks plugins -name '*.sh' -type f -print0)
           printf 'checking %d scripts\n' "${#files[@]}"
-          [ "${#files[@]}" -ge 12 ] || { echo "expected at least 16 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
+          [ "${#files[@]}" -ge 12 ] || { echo "expected at least 12 scripts, found ${#files[@]} - the search is wrong"; exit 1; }
           for f in "${files[@]}"; do bash -n "$f"; done
           # The hook fragments are sourced, never executed: tell shellcheck.
           shellcheck --shell=bash --external-sources --severity=warning "${files[@]}"
@@ -47,15 +45,9 @@ jobs:
       - name: forge checks itself
         run: |
           set -euo pipefail
-          # The FULL run: everything the Stop hook does, plus the plugin verifier
-          # and the proofs - which break things on purpose to show each check can
-          # fail, so they need a throwaway checkout and are not safe in a hook.
-          # `uv run forge check`, the same spelling the hook and the README use.
-          #
-          # The fetch exists for pull_request runs: their checkout has no
-          # refs/remotes/origin/main, and the hook-parity drift rule reads the
-          # guard's enforcing bytes from exactly that ref. Without it every PR
-          # goes red for a reason unrelated to the PR.
+          # The full run: the Stop hook's checks plus plugin verifiers and tests.
+          # The fetch gives pull_request checkouts the origin/main ref the
+          # hook-parity drift rule reads.
           git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
           npm ci
           uv run forge check
@@ -63,12 +55,8 @@ jobs:
       - name: hooks are invoked in a way the exec bit cannot break
         run: |
           set -euo pipefail
-          # The previous version of this step asserted mode 100755 in git's
-          # index. It failed - correctly - because pushes go through the GitHub
-          # API, which writes 100644. But the mode is no longer the property
-          # that matters: settings.json invokes the hooks as `bash <script>`
-          # precisely so a lost exec bit cannot silently disable a gate. Assert
-          # THAT, because it is what makes the mode irrelevant.
+          # settings.json must invoke hooks as `bash <script>`: a lost exec bit
+          # would otherwise exit 127, which Claude Code treats as non-blocking.
           for f in stacks/*/template/.claude/settings.json; do
             python3 - "$f" <<'PY'
           import json, sys
@@ -94,8 +82,7 @@ jobs:
       - name: the monitor is not a capability
         run: |
           set -euo pipefail
-          # Capabilities are things a session invokes; these are things a session
-          # is subject to. Guard the boundary rather than trusting it to stay put.
+          # Capabilities are things a session invokes; plugins are things a session is subject to.
           if find plugins -name SKILL.md -o -name manifest.yaml | grep -q .; then
             echo "a plugin grew a session-facing surface"; exit 1
           fi
@@ -108,12 +95,7 @@ jobs:
       - name: the guard can actually block
         run: |
           set -euo pipefail
-          # A gate that prints its refusal and exits 0 is not a gate. This is
-          # how the guard shipped for its first ten minutes: SystemExit is a
-          # BaseException, and a bare handler swallowed the exit(2).
-          # Deliberately left untracked: git collapses a wholly-untracked
-          # directory in --porcelain output, which is how the guard was blind to
-          # every NEW protected file while seeing edits to existing ones.
+          # A new, untracked protected file must block with exit 2; garbage input must exit 0.
           d=$(mktemp -d); git -C "$d" init -q; mkdir -p "$d/.claude"
           echo '{}' > "$d/.claude/settings.json"
           rc=0
@@ -126,12 +108,7 @@ jobs:
       - name: the projected plugins are complete
         run: |
           set -euo pipefail
-          # NOT `test -x`. The exec bit cannot survive a git-API push, and the
-          # design deliberately stopped depending on it - hooks are invoked as
-          # `sh <script>`. Asserting the mode here re-introduced a requirement
-          # the neighbouring step exists to make irrelevant, which is the same
-          # additive reflex this whole change set is about.
-          # The real property is that the launcher runs whatever its mode is:
+          # Not `test -x`: hooks are invoked as `sh <script>`, so the launcher must run whatever its mode.
           test -f plugins/forge-monitor/hooks/emit.sh
           chmod -x plugins/forge-monitor/hooks/emit.sh
           printf '{"session_id":"ci","cwd":"/tmp"}' \
@@ -144,9 +121,6 @@ jobs:
       - name: the docs build, with dead links treated as failures
         run: |
           set -euo pipefail
-          # `npm ci` ran with the checks above. One caller of assemble.mjs, and
-          # this is it: the npm docs:* scripts were a second one, and CI used
-          # those while `forge docs` sat unused.
           uv run forge docs
 
   # Layer 2 - the scaffolds actually work. This is the expensive, load-bearing one.
@@ -181,11 +155,7 @@ jobs:
       - name: the gate recovers a missing CLAUDE_PROJECT_DIR, and blocks with no project
         run: |
           set -euo pipefail
-          # The first version of this step asserted "unset => must not exit 0",
-          # which is wrong: recovering the project root is the whole point of
-          # the fix, and a clean project then legitimately passes. The local
-          # test only "passed" because a broken file happened to be present.
-          # Two separate properties, tested separately:
+          # Two properties:
           cd /
           # 1. unset, but the project IS findable from the hook's own path:
           #    the gate must still find it and still catch a broken file.
@@ -229,9 +199,6 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-      # The template moved to bun, so the job that scaffolds it needs bun. CI
-      # caught this: the scaffold's own verifier went red because `bun install`
-      # never ran, so node_modules was missing and the gate blocked - correctly.
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: "1.2.0"

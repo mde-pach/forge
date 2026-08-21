@@ -23,7 +23,6 @@ export default defineConfig({
     nav: [
       { text: 'Kernel', link: '/generated/kernel' },
       { text: 'Contract', link: '/generated/contract' },
-      { text: 'Frictions', link: '/generated/frictions' },
     ],
     sidebar: [
       { text: 'Why forge is shaped this way', link: '/explanation' },
@@ -49,7 +48,6 @@ export default defineConfig({
           { text: 'Build & run these docs', link: '/how-to/docs' },
         ],
       },
-      { text: 'Frictions log', link: '/generated/frictions' },
     ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/mde-pach/forge' }],
   },

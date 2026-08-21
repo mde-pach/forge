@@ -4,7 +4,7 @@ This is the standard docs pipeline for forge and for every project under it.
 
 ## The pattern
 
-- **Markdown in the repo is the only source.** Kernel, contract, frictions, capability procedures live where they live; nothing is written twice.
+- **Markdown in the repo is the only source.** Kernel, contract, capability procedures live where they live; nothing is written twice.
 - **The site is a generated projection.** `docs/.vitepress/assemble.mjs` copies canonical files into `docs/generated/` (gitignored) at build time; the site is built from `docs/` with VitePress. Editing anything under `generated/` or `dist/` is always wrong — edit the source and rebuild.
 - **Diátaxis quadrants stay unmixed**: reference (kernel, contract, sources), explanation (`docs/explanation.md`), how-to guides (`docs/how-to/`). Tutorials appear when a real onboarding need does.
 

@@ -12,7 +12,6 @@ const map = {
   'kernel/KERNEL.md': 'kernel.md',
   'kernel/SOURCES.md': 'sources.md',
   'contract/CONTRACT.md': 'contract.md',
-  'FRICTIONS.md': 'frictions.md',
 }
 for (const [src, dst] of Object.entries(map)) {
   if (!existsSync(join(root, src))) { console.error(`assemble: missing ${src}`); process.exit(1) }
@@ -23,13 +22,10 @@ for (const cap of readdirSync(join(root, '.claude', 'skills'))) {
   const skill = join(root, '.claude', 'skills', cap, 'SKILL.md')
   if (existsSync(skill)) copyFileSync(skill, join(out, `capability-${cap}.md`))
 }
-// The base CLAUDE.md proposal: canonical file is kernel/CLAUDE.md.proposed.
-// Its rationale lives in an HTML comment (so the file is installable as-is);
-// here that comment becomes the page's prose.
+// The base CLAUDE.md proposal: the installable file plus its rationale.
 {
-  const src = readFileSync(join(root, 'kernel/CLAUDE.md.proposed'), 'utf8')
-  const rationale = src.split('<!--')[1].split('-->')[0].trim().split('\n').slice(2).join('\n')
-  const body = src.split('-->')[1].trim()
+  const body = readFileSync(join(root, 'kernel/CLAUDE.md.proposed'), 'utf8').trim()
+  const rationale = readFileSync(join(root, 'docs/.vitepress/claude-md-rationale.md'), 'utf8').trim()
   writeFileSync(join(out, 'claude-md.md'),
 `# A base CLAUDE.md
 
@@ -38,7 +34,7 @@ concatenated into every project, in every session.
 
 ## Why it is this short
 
-${rationale.split('\n').map((l) => (l.startsWith('  ') ? l.slice(2) : l)).join('\n')}
+${rationale}
 
 ## The file
 
@@ -48,10 +44,7 @@ ${body}
 
 ## Where it does *not* belong
 
-Anything that must not fail. This file is delivered as a user message with no
-guarantee of compliance; a hook is a process that either exits 0 or exits 2.
-If a rule matters, [scaffold it](/how-to/start-a-project) instead of writing
-it down.
+Anything that must not fail: a hook exits 0 or 2; this file is advice.
 `)
 }
 

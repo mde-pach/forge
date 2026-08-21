@@ -1,17 +1,4 @@
-"""
-The documentation site: build it, verify it is current, or preview it.
-
-There is one caller of `assemble.mjs` and this is it. There used to be three -
-`docs:dev` and `docs:build` in package.json, plus this command added last -
-which is the same "second mechanism for one job" the registry exists to stop,
-gotten in through a door the registry does not watch. CI used the npm one and
-nothing used this one.
-
-`--check` regenerates into a scratch copy and fails if anything differs from
-what is committed. That is the whole mechanism for keeping generated prose
-honest: a human never maintains it, so it cannot drift, and a stale commit is a
-red build rather than a page that quietly lies.
-"""
+"""Build the documentation site, verify the generated pages are current, or preview it."""
 
 from __future__ import annotations
 
@@ -27,7 +14,7 @@ from forge.registry import ROOT
 
 GENERATED = ROOT / "docs" / "generated"
 ASSEMBLE = ROOT / "docs" / ".vitepress" / "assemble.mjs"
-VITEPRESS = ROOT / "node_modules" / ".bin" / "vitepress"
+VITEPRESS = ROOT / "node_modules" / ".bin" / "vitepress"  # by path: npx may fetch another version
 
 
 def _assemble() -> int:
@@ -43,9 +30,6 @@ def _assemble() -> int:
 
 
 def _vitepress(subcommand: str) -> int:
-    """The local binary by path, not `npx`. `npx` will happily fetch a different
-    version from the network when node_modules is incomplete, which turns a
-    missing install into a silently different build."""
     if not VITEPRESS.is_file():
         print("docs: node_modules is missing - run `npm ci` first", file=sys.stderr)
         return 2
@@ -53,11 +37,7 @@ def _vitepress(subcommand: str) -> int:
 
 
 def _check() -> int:
-    # docs/generated is a build artifact and is gitignored, so "stale" only
-    # means something when there is a previous build to compare against. On a
-    # clean checkout there is nothing to drift from, and reporting drift there
-    # would be a check that fails for the wrong reason - the exact habit this
-    # command exists to break.
+    """Regenerate into scratch and compare with the previous build, if there was one."""
     existed = GENERATED.is_dir() and any(GENERATED.iterdir())
     before = Path(tempfile.mkdtemp()) / "generated"
     if existed:

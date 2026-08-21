@@ -28,8 +28,6 @@ jobs:
         with:
           enable-cache: true
       - run: npm ci
-      # `uv run forge docs`, not `npm run docs:build`. There is one caller of
-      # assemble.mjs and this workflow used to be a second one.
       - run: uv run forge docs
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

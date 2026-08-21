@@ -1,20 +1,8 @@
 #!/usr/bin/env python3
-"""
-forge-monitor dashboard.
+"""forge-monitor dashboard: serves the store, read live over the GitHub API with conditional requests.
 
-The store is the source of truth, and it is read live over the GitHub API - no
-clone, no pull, nothing on disk. Conditional requests make that free: GitHub
-does not count a 304 against the rate limit, so the page is current rather than
-current-as-of-the-last-sync.
-
-This process holds no durable state, which is what makes it runnable from
-anywhere - your laptop, another machine, a box that is always on - and why
-nothing breaks when it is not running at all. Sessions keep publishing; this is
-only a window.
-
-Not a script. `forge start` is the only thing that runs this, and the readiness
-report it prints on the way up uses `load_config` and `find_token` from here -
-so there is one answer to "where does the token come from", not two that drift.
+Holds no durable state. Run only by `forge start`, which also uses load_config
+and find_token from here.
 """
 
 from __future__ import annotations
@@ -42,7 +30,7 @@ def load_config(state: Path) -> dict:
 
 
 def api(url: str, tok: str, etag: str | None = None):
-    """(status, decoded-json-or-None, etag). status 0 means the request never landed."""
+    """(status, json or None, etag); status 0 means no response."""
     req = urllib.request.Request(url)
     req.add_header("Authorization", f"Bearer {tok}")
     req.add_header("Accept", "application/vnd.github+json")
@@ -61,7 +49,7 @@ def api(url: str, tok: str, etag: str | None = None):
 
 
 def find_token(cfg: dict) -> str | None:
-    """One answer to where the token comes from, in priority order."""
+
     for var in ("FORGE_MONITOR_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         if os.environ.get(var):
             return os.environ[var]
@@ -83,13 +71,8 @@ def find_token(cfg: dict) -> str | None:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    # The platform's own mimetypes database is what decides Content-Type for
-    # everything not listed here, and it does not agree with itself: Windows
-    # reads it out of the registry, some Linux images ship one with no PWA
-    # extensions in it at all. A wrong type here is not cosmetic - a manifest
-    # served as anything but a JSON-ish type is skipped by the install prompt,
-    # silently, with nothing in the console pointing back at this file.
-    extensions_map = {
+    # Platform mimetypes differ; a wrong manifest type breaks the PWA install.
+    extensions_map: ClassVar[dict[str, str]] = {
         **SimpleHTTPRequestHandler.extensions_map,
         ".webmanifest": "application/manifest+json",
         ".js": "text/javascript",
@@ -100,10 +83,6 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*a, directory=str(HERE / "dashboard"), **kw)
 
     # ---- data -------------------------------------------------------------
-    # The store is read live over the API, not from a clone. A conditional
-    # request costs nothing: GitHub does not count a 304 against the primary
-    # rate limit when it is correctly authorised, so polling hard is free and
-    # the page is genuinely current rather than current-as-of-the-last-pull.
     _etag: str | None = None
     _cache: ClassVar[dict[str, dict]] = {}  # path -> {sha, record}
     _last_good: ClassVar[list[dict]] = []
@@ -135,19 +114,8 @@ class Handler(SimpleHTTPRequestHandler):
             Handler._online = True
             return Handler._last_good  # nothing changed; free
         if status == 404:
-            # 404 is ambiguous: "repo exists, sessions/ not created yet" and
-            # "repo does not exist / this token cannot see it" answer the same
-            # way. Probing the repo root disambiguates - only a store that is
-            # really there and really empty may render as an empty dashboard;
-            # an unreachable one must degrade to stale-beats-blank, because a
-            # live-looking empty page over a dead store is the worst lie this
-            # file can tell. Measured, not hypothesized: with a real token on
-            # the machine and a bad repo in config, the dashboard showed
-            # {"source": "store", "waiting": []}.
-            # The probe is ref-aware on purpose: probing the repo root would
-            # bless a typo'd branch in config as "honestly empty" while the
-            # sessions sit on the real branch - the same lie along a different
-            # axis. /branches/{branch} 200s only when the exact ref exists.
+            # 404 means either "no sessions yet" or "no such repo/branch"; only the
+            # first may render as an empty dashboard, so probe the exact branch.
             probe_status, _, _ = self._api(
                 f"https://api.github.com/repos/{repo}/branches/{branch}", tok
             )
@@ -253,7 +221,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def serve_forever(port: int, state: Path) -> int:
-    """Block, serving the view on loopback. `forge start` owns everything else."""
+
     state.mkdir(parents=True, exist_ok=True)
     srv = HTTPServer(("127.0.0.1", port), partial(Handler, state=state))
     try:

@@ -7,77 +7,33 @@ description: Start a new project with forge's process enforcement already wired 
 
 ## Run it
 
-Run the script that sits beside this file:
-
 ```bash
 bash .claude/skills/scaffold/scaffold.sh python /path/to/my-api "What it does"
 bash .claude/skills/scaffold/scaffold.sh nextjs  /path/to/my-web "What it does"
 ```
 
-The owner does not type that. He opens Claude Code in the forge checkout and
-says what he wants - "start a Next.js project at ~/code/x that does Y" - and
-this skill is how that becomes a scaffolded, gated project. There is no
-`forge scaffold` verb: a CLI verb was a second path to the same script, one that
-CI bypassed and nobody typed.
+The owner says what he wants ("start a Next.js project at ~/code/x that does
+Y"); this skill runs the script. The directory name becomes the project name.
 
 Report the last line of the output verbatim. `verifier : PASS` is the only
-acceptable result; anything else means the project's gates are not working and
-the owner needs to know before he builds on it.
+acceptable result. `FAIL` or `SKIPPED` (dependencies did not install) means the
+gates are not proven; say so, do not hand over.
 
-The directory name becomes the project name; a Python module name is derived
-from it. Placeholders are substituted, hook scripts are made executable, and
-the next commands are printed.
+## What gets enforced
 
-## What gets enforced, and where
+Three layers, described in `docs/how-to/start-a-project.md`: a per-edit check
+(`PostToolUse`), a whole-project gate the turn cannot end without (`Stop`), and
+CI running the same `gate.sh`. The verifier runs the gate twice on the clean
+scaffold (`next build` rewrites `tsconfig.json`) and once with a broken file,
+which must exit 2.
 
-Three layers, because they catch different things:
-
-| Layer | Fires | Runs | On failure |
-|---|---|---|---|
-| `PostToolUse` | after each file edit | ruff / biome on **that file** (~50ms) | exit 2 — diagnostics go back to Claude, which self-corrects |
-| `Stop` | when Claude tries to finish the turn | the **whole project**: ruff + mypy --strict + pytest, or biome ci + tsc --noEmit + next build | exit 2 — the turn cannot end |
-| CI | on push and PR | **the same `gate.sh`**, plus a docker build | the build is red |
-
-The Stop gate is the real one. It catches what per-file checks structurally
-cannot: cross-module type errors, broken tests, and files written through Bash
-rather than Edit.
-
-CI deliberately executes the same script rather than a parallel list of steps.
-There is one definition of green, so local and CI cannot drift — only the
-escape hatch differs: the interactive loop guard releases a turn after three
-identical failures (then re-arms), while CI sets `FORGE_GATE_NO_RELEASE=1`,
-because in CI there is no human to unblock and a release would turn a red build
-green.
-
-## Why the templates are pinned the way they are
+## Before changing a template
 
 `references/verified-stack-facts.md` records what was checked against the real
-tools and when — ruff's default set, Next.js not type-checking under Turbopack,
-the npm package-name squat. Read it before changing a template's tooling; it is
-the difference between a version choice and a guess.
-
-## Verify before handing over
-
-The script verifies itself and prints the result; a scaffold is only done when
-that line reads `verifier : PASS`. It runs three checks, and each exists because
-the absence of it shipped a broken gate at least once:
-
-```
-clean gate run 1 -> 0    the scaffold is green
-clean gate run 2 -> 0    and STAYS green: `next build` rewrites tsconfig.json,
-                         which made run 2 red forever while run 1 looked fine
-broken-file probe -> 2   the fast check actually blocks
-```
-
-If the line reads `FAIL` or `SKIPPED`, the project is not ready to hand over —
-report that, do not paper over it. `SKIPPED` means dependencies did not install
-(usually no network), so nothing was proven.
+tools and when.
 
 ## What it refuses
 
 - a target directory that exists and is not empty
-- a Python module name owned by the standard library, or one that resolves to an
-  installed package instead of the project's own `src/` (`py`, for instance, is
-  shipped transitively by pytest and would silently shadow the project)
-- creating a repository, choosing a host, or publishing anything — that is a
-  separate, approved decision
+- a Python module name owned by the stdlib or resolving to an installed package
+- creating a repository, choosing a host, or publishing anything — a separate, approved decision

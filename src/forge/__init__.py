@@ -1,3 +1,3 @@
-"""forge — an operating framework for working with Claude."""
+"""forge."""
 
 __version__ = "0.2.0"

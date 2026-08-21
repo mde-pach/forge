@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""
-Mark records that stopped reporting.
+"""Mark records that stopped reporting; run from the SessionStart hook.
 
-No daemon watches for a session that died - a closed laptop lid fires no
-SessionEnd, so a record would claim "working" forever. Instead the next session
-to start sweeps: the system repairs itself whenever it is used, which is the
-only moment the repair matters.
-
-Run from the SessionStart hook, in the background.
+A record that has not been heard from for STALE minutes is flagged but keeps
+its state (a session blocked on a permission prompt emits nothing). An ended
+record older than FORGET hours is removed.
 """
 
 from __future__ import annotations
@@ -20,16 +16,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paths
 
-# Two thresholds, and the distinction matters.
-#
-# STALE: we have not heard from this session in a while. That is a statement
-# about OUR knowledge, not about the session - a session blocked on a permission
-# prompt emits nothing precisely because it is waiting for you, and that is the
-# single most important row on the dashboard. So a stale record keeps its state
-# and its reason, and is only flagged. Hiding it would be the worst outcome:
-# silently dropping the thing that has been waiting longest.
-#
-# FORGOTTEN: long enough that the record is noise. Removed outright.
 DEFAULT_STALE_MINUTES = 45
 DEFAULT_FORGET_HOURS = 72
 
@@ -97,9 +83,6 @@ def run(exclude: str | None = None) -> int:
             if rec.get("ended") or age < limit * 60 or rec.get("stale"):
                 continue
 
-            # Deliberately does NOT touch state, attention_reason or ended. We
-            # do not know that the session died; we know only that we stopped
-            # hearing from it, and the dashboard says exactly that.
             rec["stale"] = True
             rec["stale_since"] = now().strftime("%Y-%m-%dT%H:%M:%SZ")
             rec["stale_reason"] = f"no events for over {limit} minutes"
@@ -108,9 +91,7 @@ def run(exclude: str | None = None) -> int:
             tmp.replace(f)
             swept.append(f.stem)
 
-    # Marking a record locally is not enough - the store would keep claiming
-    # those sessions are alive. Clearing published_at makes each one pending,
-    # and the flush that follows this sweep sends them.
+    # Clearing published_at makes each swept record pending for the flush that follows.
     for sid in swept:
         f = state / "sessions" / f"{sid}.json"
         try:

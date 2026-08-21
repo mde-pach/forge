@@ -227,6 +227,22 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "-c",
+              "t=$(mktemp) || { printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: mktemp failed.\"}\\n'; exit 0; }; if git -C \"${CLAUDE_PROJECT_DIR:-.}\" show origin/main:plugins/forge-guard/hooks/admit.py >\"$t\" 2>/dev/null; then for py in python3 python py; do if command -v \"$py\" >/dev/null 2>&1; then \"$py\" \"$t\"; rc=$?; rm -f \"$t\"; exit $rc; fi; done; rm -f \"$t\"; printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: no python interpreter found.\"}\\n'; exit 0; fi; rm -f \"$t\"; printf '{\"systemMessage\":\"forge-guard is OFF in this checkout: origin/main:plugins/forge-guard/hooks/admit.py is not extractable (no git, no origin remote, or a shallow clone).\"}\\n'; exit 0"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

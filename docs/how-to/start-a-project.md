@@ -5,9 +5,8 @@ Open Claude Code in the forge checkout and say what you want:
 > Start a Next.js project at `~/code/my-web` — a dashboard for X.
 
 The `scaffold` capability is a project skill of the forge repository, so any
-session started there already has it. There is nothing to install and no command
-to type; the script it runs lives beside the skill, at
-`.claude/skills/scaffold/scaffold.sh`.
+session started there already has it. The script it runs lives beside the
+skill, at `.claude/skills/scaffold/scaffold.sh`.
 
 The last line of the output is the only one that matters:
 
@@ -41,34 +40,19 @@ not install, so nothing was proven.
 | `Stop` | when Claude tries to end the turn, on the whole project | exit 2 — the turn cannot end |
 | CI | push and pull request | red build |
 
-CI runs the *same script* as the `Stop` hook. There is one definition of green,
-so local and CI cannot drift apart. The only difference is the escape hatch:
-interactively, three identical failures release the turn once (with a loud
-warning) and then re-arm, because a broken gate must not trap a session; CI sets
-`FORGE_GATE_NO_RELEASE=1`, because there is nobody to unblock and a release
-would turn a red build green.
+CI runs the *same script* as the `Stop` hook, so local and CI cannot drift. The
+only difference is the escape hatch: interactively, three identical failures
+release the turn once (with a loud warning) and then re-arm; CI sets
+`FORGE_GATE_NO_RELEASE=1`, because there is nobody to unblock.
 
-## Why the gates look paranoid
+## Properties the gates hold
 
-Every guard below exists because its absence shipped a gate that looked on and
-was off:
-
-- **Decisions come from exit codes, never from tool output.** The first version
-  grepped ruff's output for a marker string. ruff 0.16 changed the format and
-  the check silently passed a broken file.
-- **`jq` missing blocks.** The hook cannot read its payload without it, and a
-  hook that cannot read its payload was exiting 0.
-- **A missing `CLAUDE_PROJECT_DIR` blocks.** It used to exit 0.
-- **Hooks are invoked as `bash <script>`.** The GitHub API drops file modes, so
-  a pushed-then-cloned hook is not executable; it would exit 127, and Claude
-  Code treats any code other than 0 or 2 as non-blocking.
-- **The loop guard hashes normalised output.** Build durations made every
-  failure unique, so the counter never reached three and the gate deadlocked.
-- **The verifier runs the gate twice.** `next build` rewrites `tsconfig.json`,
-  which Biome then reported as unformatted forever: green on run 1, red on
-  every run after.
-- **Python module names are checked for shadowing.** A project called `py`
-  imported pytest's transitive `py` package instead of its own source.
+- Decisions come from exit codes, never from parsing tool output.
+- A missing `jq` or `CLAUDE_PROJECT_DIR` blocks rather than passing silently.
+- Hooks are invoked as `bash <script>`, so a lost executable bit cannot disable a gate.
+- The loop guard hashes normalised output, so build durations do not defeat the counter.
+- The verifier runs the gate twice (`next build` rewrites `tsconfig.json`).
+- Python module names are checked for shadowing stdlib or installed packages.
 
 ## Fill in CLAUDE.md
 

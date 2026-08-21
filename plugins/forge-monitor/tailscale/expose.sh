@@ -1,22 +1,6 @@
 #!/usr/bin/env sh
-# Make a loopback port reachable from your own devices, and from nothing else.
-#
-#   sh expose.sh on  PORT   -> prints the URL on stdout, nothing else
-#   sh expose.sh off PORT
-#
-# Called only by `forge start`, which tears the mapping down again when you stop
-# it. It prints the URL and nothing else on stdout because `forge start` reads
-# that; everything human goes to stderr.
-#
-# `tailscale serve` - never `tailscale funnel`. Serve reaches devices signed in
-# to your tailnet; Funnel publishes to the open internet. For session state that
-# distinction is the whole security model, so Funnel is not an option this
-# script offers.
-#
-# An earlier version took an optional mount path and a --status mode, on the
-# theory that this was "the reachability primitive for the whole stack". Nothing
-# ever called it that way. Speculative generality in a script nothing else uses
-# is just more surface to keep correct.
+# expose.sh on|off PORT - serve a loopback port on the tailnet (never funnel).
+# stdout: the URL, nothing else. Called only by `forge start`.
 set -eu
 
 mode="${1:-}"
@@ -36,7 +20,7 @@ esac
 command -v tailscale >/dev/null 2>&1 || {
   cat >&2 <<'MSG'
 tailscale is not installed.
-  macOS   brew install --cask tailscale        (or the App Store build)
+  macOS   brew install --cask tailscale
   Linux   curl -fsSL https://tailscale.com/install.sh | sh
 Then: sudo tailscale up
 MSG
@@ -48,8 +32,7 @@ tailscale status >/dev/null 2>&1 || {
   exit 1
 }
 
-# The first run triggers a one-time consent page enabling HTTPS certificates for
-# the tailnet. This command is what prompts it.
+# First run prompts a one-time HTTPS consent page.
 tailscale serve --bg "http://127.0.0.1:${port}" >&2
 
 name=$(tailscale status --json 2>/dev/null \

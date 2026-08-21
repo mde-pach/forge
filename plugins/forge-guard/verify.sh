@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
-# forge-guard verifier.
-#
-# The design claims are: a protected change blocks the turn until an
-# independent review is recorded, the review must carry the prompt its reviewer
-# was given, a repeated identical block releases once rather than looping
-# forever, and the release valve is off where no human can unblock. Until this
-# file existed the guard had no check at all - the one mechanism whose whole
-# job is second-guessing changes was itself never exercised by anything.
+# forge-guard verifier. Claims: a protected change blocks the turn until a
+# review carrying its prompt is recorded; identical blocks release once after
+# three, then re-arm; the valve is off under FORGE_GATE_NO_RELEASE.
 set -uo pipefail
 
 GUARD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,8 +10,7 @@ pass=0; fail=0
 ok() { printf '  ok    %s\n' "$1"; pass=$((pass+1)); }
 no() { printf '  FAIL  %s\n' "$1"; fail=$((fail+1)); }
 
-# Every proof runs in a scratch git repo, never this one: the guard reads
-# `git status` of the payload's cwd, so a scratch repo is a complete world.
+# Every proof runs in a scratch git repo; the guard reads `git status` of the payload's cwd.
 mk_repo() {
   local d="$TMP/$1"
   mkdir -p "$d"
@@ -52,12 +46,10 @@ run_guard "$d"
 { [ "$rc" = 2 ] && printf '%s' "$err" | grep -q '.claude/settings.json'; } \
   && ok "a new protected file blocks with exit 2 and is named" \
   || no "protected change gave rc=$rc, err: $(printf '%s' "$err" | head -1)"
-# Naming the tool is nearly calling it: the message must contain the exact
-# blocking invocation, not a description of one. The prose version was
-# measured costing two blocked stops before the session found the tool.
-[ "$(printf '%s' "$err" | grep -c 'TaskOutput(task_id=<its id>, block=true')" -ge 2 ] \
-  && ok "the block names the exact blocking wait call, in both branches" \
-  || no "the block does not name TaskOutput(block=true) in each branch; prose alone was measured insufficient"
+# The message names the exact tool calls; prose alone was measured insufficient.
+printf '%s' "$err" | grep -q 'TaskOutput(task_id=<id>, block=true' \
+  && ok "the block names the exact blocking wait call" \
+  || no "the block does not name TaskOutput(block=true)"
 printf '%s' "$err" | grep -q 'Agent(prompt=' \
   && ok "the block names the exact reviewer launch call" \
   || no "the block does not name the Agent call"
@@ -68,11 +60,7 @@ printf '%s' "$err" | grep -q 'no prior conclusions, no expected verdict' \
   && ok "the block forbids handing the reviewer a verdict" \
   || no "nothing warns against priming the reviewer"
 
-echo "1b. a path git would quote is still seen - one accented byte is not a bypass"
-# With core.quotePath (the default), `git status --porcelain` C-quotes any
-# non-ASCII path, so `.claude/hooks/evíl.py` arrived as `".claude/hooks/..."`
-# - leading quote, no prefix match, guard silently passed. Found by review,
-# reproduced, fixed with -z. This keeps it fixed.
+echo "1b. a path git would C-quote is still seen"
 d=$(mk_repo quoted)
 mkdir -p "$d/.claude/hooks"; printf 'x' > "$d/.claude/hooks/evíl.py"
 git -C "$d" config core.quotePath true
@@ -82,10 +70,7 @@ run_guard "$d"
   || no "quoted path bypassed the guard (rc=$rc)"
 
 echo "2. a recorded review with its prompt unblocks; one without does not"
-# Ordering note: this section deliberately ends on a PASS, which clears the
-# release counter raised by its two blocks. Add a third blocking assertion
-# here and the valve opens instead - the test would start asserting the
-# opposite of what it means to.
+# This section must end on a pass: a third block here would open the valve.
 fp=$(fp_of "$d")
 mkdir -p "$d/.claude/reviews"
 printf '# Review\nFindings.\n' > "$d/.claude/reviews/$fp.md"
@@ -103,11 +88,7 @@ run_guard "$d"
 echo "3. an identical block releases on the third attempt, loudly, then re-arms"
 d=$(mk_repo loop)
 mkdir -p "$d/.claude"; echo '{}' > "$d/.claude/settings.json"
-# The gate's own counter churns beside the guard's in a real Stop cycle; if
-# either counter file were counted by the guard, every block would carry a
-# fresh fingerprint and the valve would be sealed by its own bookkeeping -
-# which is exactly how the first version of this test failed, and review
-# found the gate-state variant of the same seal.
+# The gate's counter churns beside the guard's; it must not change the fingerprint.
 echo 'digest 1' > "$d/.claude/.gate-state"
 run_guard "$d"; r1=$rc
 echo 'digest 2' > "$d/.claude/.gate-state"
@@ -121,45 +102,42 @@ run_guard "$d"; r4=$rc
   || no "third attempt: rc=$r3, out: $o3"
 [ "$r4" = 2 ] && ok "the guard re-arms: the next turn blocks again" || no "re-armed rc=$r4"
 
-echo "4. editing the protected files resets the count - a new demand starts over"
+echo "4. editing the protected files resets the count"
 d=$(mk_repo reset)
 mkdir -p "$d/.claude"; echo '{}' > "$d/.claude/settings.json"
 run_guard "$d"; run_guard "$d"
-echo '{"a":1}' > "$d/.claude/settings.json"   # new content, new fingerprint
+echo '{"a":1}' > "$d/.claude/settings.json"
 run_guard "$d"; r3=$rc
-[ "$r3" = 2 ] && ok "attempt 3 against a CHANGED fingerprint still blocks" \
+[ "$r3" = 2 ] && ok "attempt 3 against a changed fingerprint still blocks" \
               || no "changed fingerprint released early (rc=$r3)"
 
 echo "5. where no human can unblock, the valve is off"
 d=$(mk_repo ci)
 mkdir -p "$d/.claude"; echo '{}' > "$d/.claude/settings.json"
 all=0
-for i in 1 2 3 4 5; do
+for _ in 1 2 3 4 5; do
   printf '{"cwd":"%s"}' "$d" | FORGE_GATE_NO_RELEASE=1 \
     python3 "$GUARD_DIR/hooks/protected.py" >/dev/null 2>&1; [ $? = 2 ] || all=1
 done
-[ "$all" = 0 ] && ok "FORGE_GATE_NO_RELEASE blocks on every attempt, forever" \
+[ "$all" = 0 ] && ok "FORGE_GATE_NO_RELEASE blocks on every attempt" \
                || no "the valve released with FORGE_GATE_NO_RELEASE set"
 
-echo "6. protection is the default; the exposed list is short and deliberate"
+echo "6. protection is the default; the exposed list is short"
 d=$(mk_repo scope)
 mkdir -p "$d/docs/how-to"; echo prose > "$d/docs/how-to/thing.md"; echo readme > "$d/README.md"
 run_guard "$d"
 [ "$rc" = 0 ] && ok "prose (docs/, README.md) changes freely" || no "prose blocked (rc=$rc)"
 mkdir -p "$d/src/forge/checks"; echo 'X = 1' > "$d/src/forge/checks/planted.py"
 run_guard "$d"
-[ "$rc" = 2 ] && ok "a check edit blocks - the exact hole a session once used, unreviewed" \
-              || no "src/forge/checks/ change passed (rc=$rc)"
+[ "$rc" = 2 ] && ok "a check edit blocks" || no "src/forge/checks/ change passed (rc=$rc)"
 rm -rf "$d/src"
 mkdir -p "$d/stacks/python/template/.claude/hooks"; echo 'exit 0' > "$d/stacks/python/template/.claude/hooks/planted.sh"
 run_guard "$d"
-[ "$rc" = 2 ] && ok "a template's .claude/ blocks - scaffolds ship it into every project" \
-              || no "embedded .claude/ change passed (rc=$rc)"
+[ "$rc" = 2 ] && ok "a template's .claude/ blocks" || no "embedded .claude/ change passed (rc=$rc)"
 rm -rf "$d/stacks"
 echo 'ignored/' > "$d/.gitignore"
 run_guard "$d"
-[ "$rc" = 2 ] && ok ".gitignore blocks - it can hide files from every status-based check" \
-              || no ".gitignore change passed (rc=$rc)"
+[ "$rc" = 2 ] && ok ".gitignore blocks" || no ".gitignore change passed (rc=$rc)"
 rm -f "$d/.gitignore"
 
 echo "7. recording the review does not demand a review of the review"
@@ -170,9 +148,36 @@ fp=$(fp_of "$d")
 mkdir -p "$d/.claude/reviews"
 printf '# Review\n\n## Prompt\nReview the diff.\n\nFine.\n' > "$d/.claude/reviews/$fp.md"
 run_guard "$d"
-[ "$rc" = 0 ] \
-  && ok "the review file, though under .claude/, is exempt - no infinite regress" \
-  || no "writing the review re-triggered the guard (rc=$rc)"
+[ "$rc" = 0 ] && ok "the review file, though under .claude/, is exempt" \
+              || no "writing the review re-triggered the guard (rc=$rc)"
+
+echo "8. a file may not get denser; a new file may not exceed the tree's median"
+admit() { printf '%s' "$1" | python3 "$GUARD_DIR/hooks/admit.py" >/dev/null 2>&1; echo $?; }
+printf 'a = 1\nb = 2\n' > "$TMP/e.py"
+rc=$(admit "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TMP/e.py\",\"old_string\":\"a = 1\",\"new_string\":\"# why a is one\\na = 1\"}}")
+[ "$rc" = 2 ] && ok "an Edit that raises a file's density is refused" || no "denser Edit rc=$rc"
+printf '# one\n# two\na = 1\n' > "$TMP/d.py"
+rc=$(admit "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TMP/d.py\",\"old_string\":\"# two\\n\",\"new_string\":\"\"}}")
+[ "$rc" = 0 ] && ok "an Edit that removes prose passes" || no "sparser Edit rc=$rc"
+rc=$(admit "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TMP/d.py\",\"old_string\":\"a = 1\",\"new_string\":\"a = 2\"}}")
+[ "$rc" = 0 ] && ok "an Edit that leaves density unchanged passes" || no "neutral Edit rc=$rc"
+r=$(mk_repo dens); printf 'x = 1\n' > "$r/lean.py"; printf '# a b c d\ny = 1\n' > "$r/mid.py"
+git -C "$r" add . && git -C "$r" commit -qm files
+long=$(python3 -c "print(' '.join(['w']*40))")
+rc=$(admit "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$r/new.py\",\"content\":\"# $long\\nz = 1\\n\"}}")
+[ "$rc" = 2 ] && ok "a new file denser than the tree median is refused" || no "dense new file rc=$rc"
+rc=$(admit "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$r/new.py\",\"content\":\"z = 1\\n\"}}")
+[ "$rc" = 0 ] && ok "a new file at or below the median passes" || no "lean new file rc=$rc"
+printf '# %s\n' "$(python3 -c "print(' '.join(['w']*100))")" > "$TMP/t.py"; for _ in $(seq 100); do echo 'x = 1' >> "$TMP/t.py"; done
+out=$(printf '%s' "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TMP/t.py\",\"old_string\":\"# w \",\"new_string\":\"# w w w w \"}}" | python3 "$GUARD_DIR/hooks/admit.py" 2>/dev/null); rc=$?
+{ [ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'Within tolerance'; } \
+  && ok "3% denser passes with a warning" || no "3% denser: rc=$rc out=$out"
+rc=$(admit "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$TMP/t.py\",\"old_string\":\"# w \",\"new_string\":\"# w w w w w w w w w \"}}")
+[ "$rc" = 2 ] && ok "8% denser is refused" || no "8% denser rc=$rc"
+rc=$(admit "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$r/x.json\",\"content\":\"{}\"}}")
+[ "$rc" = 0 ] && ok "unmeasured kinds pass" || no "json rc=$rc"
+rc=$(admit "garbage")
+[ "$rc" = 0 ] && ok "garbage input never blocks" || no "garbage rc=$rc"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

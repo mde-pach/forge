@@ -5,19 +5,11 @@ description = "maxime's operating framework for working with Claude"
 requires-python = ">=3.11"
 dependencies = ["pyyaml>=6"]
 
-# THE EXECUTABLE REGISTRY.
-#
-# This is the only list of things forge can run, and it is load-bearing rather
-# than descriptive: uv exposes exactly what is declared here and nothing else.
-# A script that exists on disk but is absent from this table cannot be invoked
-# through the supported path, which is what stops a second mechanism for the
-# same job from quietly appearing beside the first one.
-#
-# A README section titled "what forge provides" can be wrong for months, because
-# nothing depends on it being right. This cannot be wrong for more than a few
-# minutes, because things stop working.
 [project.scripts]
 forge = "forge.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.12", "mypy>=1.14", "types-PyYAML"]
 
 [build-system]
 requires = ["uv_build>=0.9,<0.13"]
@@ -33,17 +25,17 @@ target-version = "py311"
 [tool.ruff.lint]
 extend-select = ["I", "N", "A", "ARG", "PTH", "EM", "RET", "SLF", "TID", "INP"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.mypy]
 strict = true
 warn_unreachable = true
-files = ["src"]
+files = ["src", "tests"]
 
 [tool.ruff.lint.per-file-ignores]
-# Hook bodies deliberately swallow everything: a monitor or guard that raises
-# takes the session with it, which is worse than the observation it loses.
-# These are the two rules that encode that decision, so silencing them here is
-# the choice being stated once rather than argued in every file.
+# Hook bodies swallow everything: a raising hook takes the session with it.
 "plugins/*/hooks/*.py" = ["BLE001", "S110"]
 "plugins/forge-monitor/publish.py" = ["BLE001"]
-# The plugins are loaded by path, not imported as a package.
 "plugins/**" = ["INP001", "EXE001"]
+"tests/*" = ["INP001", "SLF001"]

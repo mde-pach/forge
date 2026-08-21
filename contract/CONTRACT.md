@@ -32,7 +32,7 @@ contract:
   post: [<what it guarantees when it completes>] # violation = capability's defect
   invariants: [<what it may never corrupt>]      # e.g. user data, kernel, git history
 verifier: >                 # what grades the output — never the producer itself
-reports: sbar               # every capability reports through the reporting plane
+reports: sbar               # report shape: situation, background, assessment, recommendation
 evolution:
   signals: [<usage signals that should trigger revision or deprecation>]
 ```
@@ -54,4 +54,4 @@ Each pre/postcondition is checked by exactly one side — no defensive double-ch
 
 ## What the contract does NOT govern
 
-Kernel internals, stack module contents, and dist/ projections may change freely and are not part of any capability's observable surface. Do not depend on them.
+Kernel internals and stack template contents may change freely and are not part of any capability's observable surface. Do not depend on them.

@@ -1,10 +1,4 @@
-"""
-Where state lives, on every operating system.
-
-Imported by every other module so there is exactly one answer. `os.uname()` does
-not exist on Windows and `~/.local/state` is not a Windows convention, so both
-were portability bugs waiting for the first person who is not on Linux.
-"""
+"""Where monitor state lives, per platform."""
 
 from __future__ import annotations
 
@@ -29,11 +23,9 @@ def state_dir() -> Path:
 
 
 def hostname() -> str:
-    """platform.node() works everywhere; os.uname() is POSIX-only."""
+
     return platform.node() or "unknown"
 
 
 if __name__ == "__main__":
-    # `python3 paths.py` prints the state directory, so the setup doc can tell
-    # you yours without you having to know which platform convention applies.
     print(state_dir())

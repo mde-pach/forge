@@ -1,29 +1,7 @@
-"""
-Run the session view.
+"""Run the session view: report readiness, serve on loopback, expose on the tailnet if present.
 
-One command brings the whole thing up: it says whether the view will actually
-have anything to show and why not if it will not, serves the page on loopback,
-and - if tailscale is here - makes it reachable from your phone, tearing that
-down again when you stop it.
-
-It used to be three commands (`serve`, `expose`, `doctor`) and a how-to page
-telling you to run three scripts in the right order. `doctor` in particular was
-a separate command you had to already know about to run when something looked
-wrong; a readiness report you have to ask for is a report nobody reads. It runs
-on the way up now, every time, and costs one conditional API request.
-
-It also *writes* the config rather than telling you to. The setup document used
-to have you locate a platform-specific state directory with a Python one-liner
-and hand-author a six-key JSON file - of which five keys were restatements of
-values already defaulted in the code. The one machine-specific fact is the store
-repository, and `gh` already knows your username. A readiness report that
-identifies a missing config and then hands you a document to read is the same
-defect `doctor` was: it diagnoses, and gives the work back.
-
-The readiness report never blocks. A view that shows only local records is
-worth having, so a missing token degrades the page rather than refusing to
-start - the opposite of forge's gates, deliberately, because this is a window
-and not a gate.
+The readiness report never blocks: a view with only local records is still
+worth having, so a missing token degrades the page instead of refusing to start.
 """
 
 from __future__ import annotations
@@ -46,26 +24,19 @@ DEFAULT_PORT = 7373
 
 
 def _load(filename: str) -> ModuleType:
-    """Import a plugin module by path. The plugin is not on sys.path and must
-    not be: it is loaded by Claude Code at launch, not installed.
-
-    Spelled with the extension - `_load("serve.py")`, not `_load("serve")` -
-    because the reachability check links files by name, and a stem assembled at
-    runtime is a reference nothing can see."""
+    """Import a plugin module by path; the plugin is not installed as a package."""
     path = MONITOR / filename
-    name = path.stem
-    spec = importlib.util.spec_from_file_location(name, path)
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     if spec is None or spec.loader is None:
         msg = f"cannot load {path}"
         raise ImportError(msg)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault(name, mod)
+    sys.modules.setdefault(path.stem, mod)
     spec.loader.exec_module(mod)
     return mod
 
 
 def _gh_user() -> str | None:
-    """Your login, from the credential you already authenticated with."""
     if not shutil.which("gh"):
         return None
     r = subprocess.run(
@@ -75,7 +46,7 @@ def _gh_user() -> str | None:
 
 
 def _write_store(state: Path, repo: str) -> None:
-    """Merge, never overwrite: anything else in the file is the owner's."""
+    """Merge into config.json; only store.repo is written, the rest has defaults in code."""
     path = state / "config.json"
     try:
         cfg = json.loads(path.read_text())
@@ -87,14 +58,6 @@ def _write_store(state: Path, repo: str) -> None:
 
 
 def _ensure_store(serve: ModuleType, state: Path, requested: str | None) -> None:
-    """Make sure a store is configured, asking only when there is someone to ask.
-
-    Only `store.repo` is written. `branch`, `min_publish_seconds`,
-    `heartbeat_publish_seconds`, `stale_minutes` and `forget_hours` all have
-    defaults in the code that reads them, so writing
-    them here would be five lines of config restating five constants - and a
-    config key that duplicates a default is a second place for the value to live.
-    """
     if requested:
         _write_store(state, requested)
         return
@@ -103,11 +66,7 @@ def _ensure_store(serve: ModuleType, state: Path, requested: str | None) -> None
 
     user = _gh_user()
     if not user or not sys.stdin.isatty():
-        # Nothing to derive from, or nobody to ask. Stay quiet: the readiness
-        # report below owns the "not configured" line and says what to do about
-        # it, and two functions reporting the same state is how a message ends
-        # up printed twice with different wording.
-        return
+        return  # the readiness report says what is missing
 
     default = f"{user}/forge-state"
     try:
@@ -119,8 +78,7 @@ def _ensure_store(serve: ModuleType, state: Path, requested: str | None) -> None
 
 
 def _readiness(serve: ModuleType, state: Path) -> None:
-    """What the view will be able to show, and the reason when the answer is
-    'less than you expect'. Prints; never raises, never exits."""
+    """What the view will be able to show. Prints; never raises."""
     local = len(list((state / "sessions").glob("*.json"))) if (state / "sessions").is_dir() else 0
     print(f"  state      {state} ({local} local record(s))")
 
@@ -150,8 +108,6 @@ def _readiness(serve: ModuleType, state: Path) -> None:
     if status == 200 and isinstance(listing, list):
         print(f"  store      {repo}@{branch} - {len(listing)} session record(s)")
     elif status == 404:
-        # A 404 on the contents path means one of two very different things, and
-        # reporting both as healthy is how a missing repository looked fine.
         repo_status, _, _ = serve.api(f"https://api.github.com/repos/{repo}", tok)
         if repo_status == 404:
             print(f"  store      {repo} does not exist. Create it - it holds your project")
@@ -169,8 +125,7 @@ def _readiness(serve: ModuleType, state: Path) -> None:
 
 
 def _tailscale(port: int) -> str | None:
-    """Expose on the tailnet, returning the URL. None if that is not possible,
-    which is normal and not an error."""
+    """Expose on the tailnet; returns the URL, "" if unknown, None if not possible."""
     if not shutil.which("tailscale"):
         return None
     script = MONITOR / "tailscale" / "expose.sh"
@@ -229,7 +184,7 @@ def run(args: Sequence[str] = ()) -> int:
 
     print("\nctrl-c to stop")
     try:
-        return serve.serve_forever(opts.port, state)
+        return int(serve.serve_forever(opts.port, state))
     finally:
         if exposed is not None:
             _unexpose(opts.port)
