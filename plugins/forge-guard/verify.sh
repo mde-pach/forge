@@ -52,10 +52,19 @@ run_guard "$d"
 { [ "$rc" = 2 ] && printf '%s' "$err" | grep -q '.claude/settings.json'; } \
   && ok "a new protected file blocks with exit 2 and is named" \
   || no "protected change gave rc=$rc, err: $(printf '%s' "$err" | head -1)"
-printf '%s' "$err" | grep -qi 'FOREGROUND' \
-  && ok "the block prescribes a foreground reviewer" \
-  || no "the block does not tell the session to wait for its reviewer"
-printf '%s' "$err" | grep -q 'Do NOT give' \
+# Naming the tool is nearly calling it: the message must contain the exact
+# blocking invocation, not a description of one. The prose version was
+# measured costing two blocked stops before the session found the tool.
+[ "$(printf '%s' "$err" | grep -c 'TaskOutput(task_id=<its id>, block=true')" -ge 2 ] \
+  && ok "the block names the exact blocking wait call, in both branches" \
+  || no "the block does not name TaskOutput(block=true) in each branch; prose alone was measured insufficient"
+printf '%s' "$err" | grep -q 'Agent(prompt=' \
+  && ok "the block names the exact reviewer launch call" \
+  || no "the block does not name the Agent call"
+printf '%s' "$err" | grep -q 'ALREADY running' \
+  && ok "the block handles a reviewer already in flight" \
+  || no "a second block would relaunch instead of waiting"
+printf '%s' "$err" | grep -q 'no prior conclusions, no expected verdict' \
   && ok "the block forbids handing the reviewer a verdict" \
   || no "nothing warns against priming the reviewer"
 

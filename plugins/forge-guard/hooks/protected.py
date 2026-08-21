@@ -218,21 +218,38 @@ def main() -> int:
             " exact prompt used, or re-run the review and record both.\n"
         )
     else:
+        # Naming the exact tool calls is the closest thing to enforcement a
+        # Stop hook has: it cannot force a tool choice, but for a model an
+        # instruction that names the call is nearly the call itself. Measured:
+        # the prose version of this message ("run a subagent in the
+        # foreground") still cost two blocked stops before the session found
+        # the blocking wait on its own.
         complaint = (
             "This turn changed files that decide how everything else behaves:\n"
             + "".join(f"  {f}\n" for f in files)
             + "\nThese need an independent review before the turn can end — not a re-read by\n"
             "you, which is measurably worse than no review at all, but a fresh-context pass\n"
-            "that has not seen the reasoning behind the change.\n\n"
-            "Run a subagent IN THE FOREGROUND — wait for its result; do not launch a\n"
-            "background reviewer and try to end the turn, that is a spin loop (measured\n"
-            "once at 45 blocked stops). Give it the diff and the file list. Do NOT give\n"
-            "it prior conclusions or the verdict you expect: a primed reviewer is worse\n"
-            "than none. Then record its findings:\n"
-            f"  mkdir -p {REVIEW_DIR} && write them to {REVIEW_DIR}/{fp}.md\n"
-            "with a `## Prompt` section quoting, verbatim, the prompt the reviewer got.\n\n"
-            "The name is a fingerprint of the reviewed content, so editing these files\n"
-            "again invalidates the review rather than reusing it.\n"
+            "that has not seen the reasoning behind the change. Do exactly this, now,\n"
+            "in this turn:\n\n"
+            "1. If a review agent for exactly these files is ALREADY running, do not\n"
+            "   start another and do not try to end the turn again. Wait on it:\n"
+            "     TaskOutput(task_id=<its id>, block=true, timeout=600000)\n"
+            "2. Otherwise launch the reviewer and then wait on it the same way:\n"
+            "     Agent(prompt=<the file list and how to see the diff, nothing else —\n"
+            "           no prior conclusions, no expected verdict; a primed reviewer\n"
+            "           is worse than none>)\n"
+            "     TaskOutput(task_id=<its id>, block=true, timeout=600000)\n"
+            "   Never poll it, never schedule wakeups, never end the turn while it\n"
+            "   runs: that is a spin loop (measured once at 45 blocked stops).\n"
+            "3. Record its findings:\n"
+            f"     mkdir -p {REVIEW_DIR} && write them to {REVIEW_DIR}/{fp}.md\n"
+            "   with a `## Prompt` section quoting, verbatim, the prompt the reviewer\n"
+            "   got.\n\n"
+            "If your environment has no Agent or TaskOutput tool, any equivalent that\n"
+            "runs a fresh-context reviewer and BLOCKS until it returns satisfies this;\n"
+            "if your launch tool returns the result directly, that return IS the wait.\n"
+            "The file name is a fingerprint of the reviewed content, so editing these\n"
+            "files again invalidates the review rather than reusing it.\n"
         )
 
     if _release(root, fp):
