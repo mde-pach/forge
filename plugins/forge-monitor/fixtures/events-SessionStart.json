@@ -1,0 +1,9 @@
+{
+  "_provenance": "captured from a real Claude Code SessionStart hook payload on 2026-08-21, the first time this event was ever observed to fire (repo-level hooks; the plugin-installed hook never delivered it); session_id, cwd, transcript_path and model sanitized, field names untouched",
+  "session_id": "fixture-1",
+  "transcript_path": "/tmp/proj/.claude/projects/-tmp-proj/fixture-1.jsonl",
+  "cwd": "/tmp/proj",
+  "hook_event_name": "SessionStart",
+  "model": "fixture-model",
+  "source": "startup"
+}

@@ -160,11 +160,11 @@ def fold(rec: dict, event: str, p: dict) -> None:
 
     ntype = p.get("notification_type")
     if event == "SessionStart":
-        # The payload calls it `source` (startup/resume/clear/compact). Still
-        # written to documentation, not to a captured payload: SessionStart has
-        # never been observed to fire here - no events-SessionStart.ndjson
-        # exists - which is an open question of its own. Until one is captured,
-        # the fixture replay (verify.sh 11) skips this event, and says so.
+        # The payload calls it `source` (startup/resume/clear/compact) -
+        # verified against a captured payload on 2026-08-21, the first
+        # SessionStart ever observed here: the event fires under repo-level
+        # hook wiring and never did under the plugin-installed hook. The
+        # fixture replay (verify.sh 11) now holds this line to that payload.
         rec.update(
             state="working",
             attention_reason=None,

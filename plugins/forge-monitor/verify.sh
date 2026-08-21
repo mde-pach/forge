@@ -192,11 +192,35 @@ echo "$out" | grep -q '"waiting": \["s-b", "s-a"\]' \
 echo "$out" | grep -q '"source": "local"' \
   && ok "with no store configured it still shows this machine" || no "unexpected source: $out"
 
-# A configured but unreachable store must not blank the page.
+# A configured but unreachable store must not blank the page. Stubbed at the
+# _api seam, not exercised over the real network: the network version of this
+# test passed for months in environments with no token (the code under test
+# never ran) and failed only on the one machine with a real token - where it
+# found a real bug, a dead store rendering as a live empty dashboard. A test
+# whose subject depends on who runs it is not a test.
+snap_stub() {  # $1 = state dir, $2 = sessions-dir status, $3 = repo-probe status
+  python3 - "$MON_DIR" "$1" "$2" "$3" <<'PYSNAP'
+import json, sys, importlib.util, pathlib
+spec = importlib.util.spec_from_file_location("srv", pathlib.Path(sys.argv[1]) / "serve.py")
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+sessions_status, probe_status = int(sys.argv[3]), int(sys.argv[4])
+def fake_api(self, url, tok, etag=None):
+    return (sessions_status if "/contents/" in url else probe_status), None, None
+m.Handler._api = fake_api
+m.Handler._token = lambda self, cfg: "stub-token"
+h = m.Handler.__new__(m.Handler); h.state = pathlib.Path(sys.argv[2])
+s = h._snapshot()
+print(json.dumps({"source": s["source"], "waiting": [r["session_id"] for r in s["waiting"]]}))
+PYSNAP
+}
 echo '{"store":{"repo":"mde-pach/definitely-not-a-repo-xyz"}}' > "$loc/config.json"
-out=$(snap "$loc")
+out=$(snap_stub "$loc" 404 404)
 echo "$out" | grep -qE '"source": "(local|store \(stale\))"' \
   && ok "an unreachable store degrades instead of blanking" || no "unreachable store gave: $out"
+out=$(snap_stub "$loc" 404 200)
+echo "$out" | grep -q '"source": "store"' \
+  && ok "a reachable store with no sessions yet is honestly empty" \
+  || no "empty-but-real store gave: $out"
 
 echo "7b. publishing needs no clone, and retries by being pending"
 { [ -f "$MON_DIR/publish.py" ] && [ ! -f "$MON_DIR/publish.sh" ]; } \
@@ -233,9 +257,23 @@ print(','.join(sorted(publish.upload_payload(r))))")
 
 echo "8. nothing is installed at user scope, and nothing is session-facing"
 US="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-if [ -f "$US" ] && grep -q 'forge-monitor\|emit\.sh' "$US" 2>/dev/null; then
-  no "wired into $US - this must ship as a plugin, not as global config"
-else ok "no reference in $US"; fi
+# Only hand-wired HOOKS are the violation. The plugin's own name appearing in
+# enabledPlugins IS the sanctioned mechanism ("ship as a plugin" satisfied,
+# literally) - the old grep flagged exactly that on the first machine where
+# someone installed the plugin properly, which is a check failing its purpose.
+wired=$(python3 - "$US" <<'PYUS'
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    print("no"); raise SystemExit
+hay = json.dumps(cfg.get("hooks") or {})
+print("yes" if ("forge-monitor" in hay or "emit.sh" in hay) else "no")
+PYUS
+)
+if [ "$wired" = "yes" ]; then
+  no "monitor hooks are hand-wired into $US - this must ship as a plugin, not as global config"
+else ok "no hand-wired monitor hooks at user scope (an enabledPlugins entry is the plugin path, and fine)"; fi
 find "$MON_DIR" -name 'SKILL.md' -o -name 'manifest.yaml' -o -name '*.mcp.json' | grep -q . \
   && no "a session-facing surface exists" || ok "ships no skill, manifest or MCP server"
 if command -v claude >/dev/null 2>&1; then
@@ -313,8 +351,10 @@ echo "11. a captured payload folds into the fields the record promises"
 # first record ever published carried end_reason: null: record.py read a field
 # no payload has ever contained, and nothing compared the code to a payload.
 # This is that comparison. An event with no captured payload yet is a skip that
-# says so, not a silent pass - SessionStart has never been observed to fire,
-# which is an open question, so its fixture cannot honestly exist yet.
+# says so, not a silent pass. SessionStart earned its fixture on 2026-08-21:
+# it had never been observed to fire under the plugin-installed hook, and fired
+# on the first session to run the repo-level wiring - the open question closed
+# by the same change that made the payload catchable.
 FIX="$MON_DIR/fixtures"
 fold_field() {  # $1 payload file, $2 event, $3 field -> value, or MISSING when null/absent
   FORGE_MONITOR_STATE="$TMP/fold-$(basename "$1" .json)" python3 - "$MON_DIR" "$1" "$2" "$3" <<'PYFOLD'

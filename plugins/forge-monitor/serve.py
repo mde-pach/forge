@@ -135,9 +135,29 @@ class Handler(SimpleHTTPRequestHandler):
             Handler._online = True
             return Handler._last_good  # nothing changed; free
         if status == 404:
-            Handler._online = True
-            Handler._last_good = []
-            return []  # store exists, no sessions yet
+            # 404 is ambiguous: "repo exists, sessions/ not created yet" and
+            # "repo does not exist / this token cannot see it" answer the same
+            # way. Probing the repo root disambiguates - only a store that is
+            # really there and really empty may render as an empty dashboard;
+            # an unreachable one must degrade to stale-beats-blank, because a
+            # live-looking empty page over a dead store is the worst lie this
+            # file can tell. Measured, not hypothesized: with a real token on
+            # the machine and a bad repo in config, the dashboard showed
+            # {"source": "store", "waiting": []}.
+            # The probe is ref-aware on purpose: probing the repo root would
+            # bless a typo'd branch in config as "honestly empty" while the
+            # sessions sit on the real branch - the same lie along a different
+            # axis. /branches/{branch} 200s only when the exact ref exists.
+            probe_status, _, _ = self._api(
+                f"https://api.github.com/repos/{repo}/branches/{branch}", tok
+            )
+            if probe_status == 200:
+                Handler._online = True
+                Handler._last_good = []
+                Handler._etag = None  # the retained listing etag described a different world
+                return []  # store exists, no sessions yet
+            Handler._online = False
+            return Handler._last_good or None  # stale beats blank
         if status != 200 or not isinstance(listing, list):
             Handler._online = False
             return Handler._last_good or None  # stale beats blank
